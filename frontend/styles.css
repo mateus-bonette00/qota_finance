@@ -1,0 +1,367 @@
+/* ===============================
+   Qota Finance — styles.css
+   Tema escuro + Poppins global + números em Montserrat
+   =============================== */
+
+/* --------- Fonts --------- */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&family=Montserrat:wght@700&display=swap');
+
+/* --------- Vars --------- */
+:root{
+  --primary:#2F529E;
+  --accent:#FE0000;
+  --green:#2ECC71;
+  --red:#E74C3C;
+  --blue:#3498DB;
+  --white:#ffffff;
+
+  --bg1:#0a122b;
+  --bg2:#0d1735;
+  --panel:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.18);
+  --border-soft:rgba(255,255,255,.10);
+
+  /* Amazon card */
+  --amz-accent:#FE5808;
+  --amz-bg:rgba(254,88,8,.18);
+
+  --shadow:0 16px 40px rgba(0,0,0,.45);
+
+  /* Table palette */
+  --th-grad-start:#2b54a2;
+  --th-grad-end:#243f7f;
+  --tr-bg:#0e1b3a;
+  --tr-bg-alt:#0d1834;
+  --tr-hover:#12204a;
+
+  /* Força UI escura em controles nativos */
+  color-scheme: dark;
+}
+
+/* --------- Reset / base --------- */
+*{ box-sizing:border-box; }
+html, body{
+  margin:0; padding:0;
+  color:#e9eef9;
+  background:
+   radial-gradient(1200px 800px at 10% -10%, rgba(46, 82, 158, 0.25), transparent 60%),
+   radial-gradient(1200px 800px at 90% -10%, rgba(254, 0, 0, 0.12), transparent 60%),
+   linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 40%, var(--bg1) 100%);
+}
+
+/* --------- Poppins global --------- */
+html, body, *{
+  font-family:"Poppins", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+}
+
+/* --------- Util para números (Montserrat 700) --------- */
+.num,
+.kpi-card .usd, .kpi-card .brl,
+.amz-value,
+.lucro-card .value,
+.tbl td:nth-child(5), .tbl td:nth-child(6),            /* Gastos: BRL/USD */
+.tbl th:nth-child(5), .tbl th:nth-child(6),
+/* Investimentos: BRL/USD */
+#tblI td:nth-child(3), #tblI td:nth-child(4),
+#tblI th:nth-child(3), #tblI th:nth-child(4),
+/* Produtos: vários valores monetários */
+#tblP td:nth-child(8), #tblP td:nth-child(9), #tblP td:nth-child(10),
+#tblP td:nth-child(11), #tblP td:nth-child(12),
+#tblP th:nth-child(8), #tblP th:nth-child(9), #tblP th:nth-child(10),
+#tblP th:nth-child(11), #tblP th:nth-child(12){
+  font-family: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+  font-weight:700 !important;
+  letter-spacing:.2px;
+}
+
+/* --------- Header (logo + título + filtros + tabs) --------- */
+.top{ padding:18px 20px 12px; }
+
+.brand{
+  display:grid; place-items:center;
+  margin: 8px 0 6px;
+}
+.brand__logo{
+  width: 160px; height:auto;
+  filter: drop-shadow(0 12px 24px rgba(0,0,0,.35));
+}
+.brand__title{
+  text-align:center;
+  margin: 8px 0 16px;
+  color:#1a6bc6;
+  font-weight:900;                 /* Wade 900 vibe */
+  font-size: clamp(28px, 4.6vw, 56px);
+  letter-spacing:.3px;
+  line-height:1.1;
+  text-shadow: 5px 5px 15px rgba(128,128,128,.25);
+  filter: saturate(1.25) contrast(3.45);
+}
+
+/* filtros (mês/ano) */
+.filters{
+  display:flex; gap:16px; justify-content:center; align-items:center;
+  margin-bottom:12px;
+}
+.filters label{ font-weight:700; }
+.filters select{
+  appearance:none;
+  background:var(--panel);
+  color:var(--white);
+  border:1px solid var(--border);
+  border-radius:10px; padding:8px 12px;
+  min-width:160px;
+}
+
+/* tabs */
+.tabs{
+  display:flex; gap:12px; justify-content:center; flex-wrap:wrap;
+  margin: 6px 0 12px;
+}
+.tabs a{
+  display:inline-flex;              /* ícone + texto lado a lado */
+  align-items:center;
+  gap:10px;                         /* espaço entre ícone e texto */
+  padding:12px 18px;
+  border:1px solid var(--border);
+  background:var(--panel);
+  border-radius:14px;
+  text-decoration:none; color:#fff; font-weight:700;
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+  transition: transform .06s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
+}
+.tabs a:hover{
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow:0 14px 34px rgba(0,0,0,.35);
+}
+.tabs a.active{
+  background:linear-gradient(135deg, var(--accent), #b30000);
+  border-color: rgba(255,255,255,.28);
+}
+
+/* ícone das abas */
+.tabs a .tab-ico{
+  width:20px; height:20px; display:block;
+  pointer-events:none; user-select:none;
+}
+.tabs a:hover .tab-ico{ filter: brightness(1.1); }
+.tabs a.active .tab-ico{ filter: brightness(1.15) contrast(1.05); }
+
+/* --------- Layout principal --------- */
+#app{ max-width:1380px; margin:0 auto; padding:0 24px 48px; }
+
+/* títulos de seção */
+.h3-center{
+  text-align:center; margin: 8px 0 10px;
+  font-size: 26px; font-weight:900; color:#1a6bc6;
+  text-shadow: 5px 5px 15px rgba(128,128,128,.25);
+}
+
+/* separador fino */
+.hr-soft{ height:1px; background:rgba(255,255,255,.08); border:0; margin:18px 0; }
+
+/* --------- Amazon saldo card (laranja) --------- */
+.amz-card{
+  display:flex; align-items:center; gap:16px;
+  margin: 16px auto 40px;
+  width:700px;
+  padding:22px 26px;
+  border-radius:26px;
+  background: linear-gradient(145deg, rgba(124,56,40,.6), rgba(87,37,28,.6)), var(--amz-bg);
+  border: 2px solid var(--amz-accent);
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  color:#fff;
+}
+.amz-ico{
+  width:64px; height:64px; border-radius:50%;
+  background: rgba(254,88,8,.25);
+  border:2px solid var(--amz-accent);
+  background-image: url("assets/amazon.svg");
+  background-position:center; background-repeat:no-repeat; background-size:60%;
+  flex: 0 0 64px;
+}
+.amz-title{
+  font-size:12px; text-transform:uppercase; opacity:.85; font-weight:800; letter-spacing:.35px;
+}
+.amz-value{ font-size:32px; font-weight:900; line-height:1.15; }
+
+/* --------- KPIs com ícone (3 por linha) --------- */
+.kpi-row3{
+  display:grid; gap:22px; margin: 10px 0 8px;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+}
+.kpi-card{
+  position:relative; display:flex; align-items:center; gap:14px;
+  padding:18px 20px; border-radius:16px;
+  background: linear-gradient(145deg, #233a74, #1a2b57);
+  color:#fff; border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 18px 46px rgba(0,0,0,.55), 0 2px 0 var(--primary) inset;
+}
+.kpi-card .ico{
+  width:44px; height:44px; border-radius:12px;
+  display:grid; place-items:center;
+  background: rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.22);
+  overflow:hidden;
+  flex:0 0 44px;
+}
+.kpi-card .ico img{ width:28px; height:28px; display:block; }
+
+.kpi-card.receita  { border-color: var(--green); }
+.kpi-card.despesa  { border-color: var(--red); }
+.kpi-card.result   { border-color: var(--blue); }
+
+.kpi-card .txt .lbl{
+  font-size:12px; opacity:.9; text-transform:uppercase; font-weight:800
+}
+.kpi-card .txt .usd, .kpi-card .txt .brl{
+  font-size:16px; font-weight:900; margin-top:3px
+}
+
+/* --------- Cards de lucro (verdes) --------- */
+.cards-lucros{
+  display:flex; justify-content:center;
+  gap:24px; margin-top:12px;
+  flex-wrap:wrap;
+}
+.lucro-card{
+  display:flex; align-items:center; gap:16px;
+  padding:22px 26px; border-radius:26px;
+  background: linear-gradient(145deg, rgba(40,80,60,.45), rgba(22,44,34,.45)), rgba(46,204,113,.18);
+  border: 2px solid var(--green); color:#fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  width: 500px;;
+}
+.lucro-card .ico{
+  width:52px; height:52px; border-radius:12px; display:grid; place-items:center;
+  background: rgba(46,204,113,.18); border: 1px solid var(--green);
+}
+.lucro-card .ico img{ width:28px; height:28px; }
+.lucro-card .title{ font-size:12px; text-transform:uppercase; opacity:.85; font-weight:800; }
+.lucro-card .value{ font-size:28px; font-weight:900; }
+
+/* ===================== TABELAS — com linhas nas linhas e colunas ===================== */
+.panel{
+  background:var(--panel); border:1px solid var(--border); border-radius:16px;
+  box-shadow: var(--shadow); padding:18px 20px; margin:16px 0;
+}
+
+.tbl{
+  width:100%;
+  border-collapse:separate;   /* precisa ser separate para cantos arredondados */
+  border-spacing:0;
+  font-size:14px; color:#fff;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.12);      /* borda externa do “cartão” */
+  border-radius:12px;
+}
+
+/* Cabeçalho com gradiente e linhas verticais */
+.tbl thead th{
+  background:linear-gradient(135deg, var(--th-grad-start), var(--th-grad-end));
+  color:#eaf1ff;
+  text-align:left;
+  padding:14px 14px;
+  font-weight:800;
+  position:sticky; top:0; z-index:1;
+  height:50px; vertical-align:middle;
+  border-bottom:1px solid rgba(255,255,255,.14);   /* linha separando header do body */
+  border-right:1px solid rgba(255,255,255,.12);    /* linhas entre colunas (header) */
+}
+.tbl thead th:first-child{ border-top-left-radius:12px; }
+.tbl thead th:last-child{
+  border-top-right-radius:12px;
+  border-right:none;                                 /* sem linha depois da última coluna */
+}
+
+/* Corpo com zebra + linhas horizontais e verticais */
+.tbl tbody tr{
+  background:var(--tr-bg);
+}
+.tbl tbody tr:nth-child(2n){ background:var(--tr-bg-alt); }
+.tbl tbody tr:hover{ background:var(--tr-hover); }
+
+.tbl td{
+  padding:14px 14px;
+  height:52px; vertical-align:middle;
+  border-top:1px solid rgba(255,255,255,.08);       /* linhas entre as linhas */
+  border-right:1px solid rgba(255,255,255,.10);     /* linhas entre as colunas */
+}
+.tbl tbody td:last-child{ border-right:none; }      /* sem linha na borda direita */
+
+/* Cantos inferiores arredondados */
+.tbl tbody tr:last-child td:first-child{ border-bottom-left-radius:12px; }
+.tbl tbody tr:last-child td:last-child{ border-bottom-right-radius:12px; }
+
+/* --------- Botões --------- */
+.btn{
+  background:linear-gradient(135deg, var(--accent), #b30000);
+  color:#fff; border:none; border-radius:12px;
+  padding:8px 14px; font-weight:800; letter-spacing:.3px;
+  cursor:pointer; box-shadow:0 10px 24px rgba(254,0,0,.35);
+  transition: transform .06s ease, box-shadow .12s ease, filter .12s ease;
+  font-size: 15px;
+  height: 46px;
+}
+.btn:hover{ filter:brightness(1.06); transform:translateY(-1px); box-shadow:0 14px 34px rgba(254,0,0,.45); }
+.btn:disabled{ opacity:.5; cursor:not-allowed; }
+.btn.secondary{ background:linear-gradient(135deg, #23386e, #17264f); box-shadow:0 10px 22px rgba(0,0,0,.35); }
+
+/* --------- Inputs/Form --------- */
+.row{ display:flex; gap:12px; flex-wrap:wrap; }
+.form{ display:grid; gap:10px; grid-template-columns:repeat(2,minmax(220px,1fr)); }
+label{ font-weight:700; font-size:14px; display:flex; flex-direction:column; gap:6px; }
+input, select, textarea{
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,.12);
+  color:var(--white);
+  border-radius:12px; padding:10px 12px; min-width:200px;
+}
+input[type="date"]{ min-height:42px; }
+hr{ border:none; height:1px; background:rgba(255,255,255,.1); margin:16px 0; }
+
+/* ========= SELECT: dropdown escuro (lista aberta) ========= */
+.filters select,
+select {
+  appearance: none;
+  background: var(--panel);
+  color: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  min-width: 160px;
+  outline: none;
+}
+.filters select:focus,
+select:focus {
+  border-color: rgba(255,255,255,.28);
+  box-shadow: 0 0 0 3px rgba(47, 82, 158, .35);
+}
+select option {
+  background-color: #0f1c3f; /* fundo da lista */
+  color: #ffffff;
+}
+select optgroup {
+  background-color: #0f1c3f;
+  color: #cfe0ff;
+}
+/* Remove a setinha do IE/Edge legado (não afeta modernos) */
+select::-ms-expand { display: none; }
+
+/* --------- Responsivo --------- */
+@media (max-width: 1200px){
+  .kpi-row3{ grid-template-columns:1fr; }
+}
+@media (max-width: 980px){
+  .form{ grid-template-columns:1fr; }
+  .filters{ flex-direction:column; gap:8px; }
+  .brand__logo{ width: 140px; }
+  .brand__title{ font-size: clamp(26px, 6vw, 44px); }
+}
+@media (max-width: 600px){
+  .amz-card{ flex-direction:column; text-align:center; width:100%; }
+  .cards-lucros{ flex-direction:column; align-items:center; }
+  .lucro-card{ width:100%; max-width:400px; }
+  .brand__logo{ width: 120px; }
+  .brand__title{ font-size: clamp(24px, 8vw, 36px); }
+}

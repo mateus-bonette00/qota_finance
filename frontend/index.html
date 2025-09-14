@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Controle Financeiro Qota Store</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Google Fonts: Poppins com pesos até 900 -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <link href="styles.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+  <header class="top">
+  <div class="brand">
+    <!-- Troque o src abaixo pelo caminho do seu arquivo de logo -->
+    <img src="assets/logo-qota-storee-semfundo.png" alt="Qota Store" class="brand__logo" />
+  </div>
+
+  <h1 class="brand__title">Controle Financeiro Qota Store</h1>
+
+  <hr />
+
+  <div class="filters">
+    <label>Mês:
+      <select id="selMes"></select>
+    </label>
+    <label>Ano:
+      <select id="selAno"></select>
+    </label>
+  </div>
+
+  <nav class="tabs">
+    <a href="#/principal">
+      <img class="tab-ico" src="assets/principal.svg" alt="">
+      <span>Principal</span>
+    </a>
+    <a href="#/receitas">
+      <img class="tab-ico" src="assets/receitas.svg" alt="">
+      <span>Receitas (FBA)</span>
+    </a>
+    <a href="#/graficos">
+      <img class="tab-ico" src="assets/grafico.svg" alt="">
+      <span>Gráficos</span>
+    </a>
+    <a href="#/despesas">
+      <img class="tab-ico" src="assets/despesas.svg" alt="">
+      <span>Despesas</span>
+    </a>
+    <a href="#/produtos">
+      <img class="tab-ico" src="assets/product.svg" alt="">
+      <span>Produtos Comprados</span>
+    </a>
+  </nav>
+</header>
+
+
+  <main id="app"></main>
+
+  <template id="tpl-kpi">
+    <div class="kpi-row">
+      <div class="kpi receita">
+        <div class="lbl">Receitas</div>
+        <div class="val usd"></div>
+        <div class="val brl"></div>
+      </div>
+      <div class="kpi despesa">
+        <div class="lbl">Despesas</div>
+        <div class="val usd"></div>
+        <div class="val brl"></div>
+      </div>
+      <div class="kpi result">
+        <div class="lbl">Resultado</div>
+        <div class="val usd"></div>
+        <div class="val brl"></div>
+      </div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

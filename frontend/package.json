@@ -1,0 +1,9 @@
+{
+  "name": "qota-finance-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx serve -l 5173 ."
+  },
+  "devDependencies": {}
+}

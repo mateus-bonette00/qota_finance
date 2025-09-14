@@ -1,0 +1,82 @@
+# =========================
+# Qota Finance — .gitignore
+# Frontend (HTML/CSS/JS) + Backend (Node/Express + SQLite)
+# =========================
+
+# --- Logs / depuração ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# --- Node ---
+node_modules/
+# Mantém o lockfile no controle de versão (recomendado)
+# (NÃO ignore package-lock.json)
+# package-lock.json
+
+# --- Ambiente / segredos ---
+.env
+.env.*
+!.env.example
+
+# --- SQLite / dados locais ---
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Ignora bases locais conhecidas
+/frontend/finance.db
+/backend/finance.db
+/data/
+!/data/.gitkeep
+
+# Mantém o schema no versionamento
+!backend/schema.sql
+
+# --- Builds / caches ---
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+.vite/
+.nyc_output/
+.eslintcache
+*.tsbuildinfo
+
+# --- Ferramentas/IDE ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+
+# --- Sistema Operacional ---
+.DS_Store
+Thumbs.db
+
+# --- Arquivos temporários diversos ---
+*.zip
+*.tar
+*.tar.gz
+
+# --- Frontend estático (garante que assets não sejam ignorados) ---
+# Se você decidir gerar build estático (ex.: Vite), ele cairá em /dist (já ignorado acima)
+!frontend/assets/**
+!backend/public/**
+
+
+# Ignorar apenas arquivos reais de ambiente
+.env
+backend/.env
+frontend/.env
+
+# Permitir os modelos de exemplo
+!.env.example
+!backend/.env.example
+!frontend/.env.example

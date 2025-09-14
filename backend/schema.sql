@@ -1,0 +1,91 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS gastos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  categoria TEXT NOT NULL,
+  descricao TEXT,
+  valor_brl REAL NOT NULL DEFAULT 0,
+  valor_usd REAL NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT
+);
+
+CREATE TABLE IF NOT EXISTS investimentos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  valor_brl REAL NOT NULL DEFAULT 0,
+  valor_usd REAL NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT
+);
+
+CREATE TABLE IF NOT EXISTS receitas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  origem TEXT NOT NULL DEFAULT 'FBA',
+  descricao TEXT,
+  valor_brl REAL NOT NULL DEFAULT 0,
+  valor_usd REAL NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT,
+  bruto REAL NOT NULL DEFAULT 0,
+  cogs REAL NOT NULL DEFAULT 0,
+  taxas_amz REAL NOT NULL DEFAULT 0,
+  ads REAL NOT NULL DEFAULT 0,
+  frete REAL NOT NULL DEFAULT 0,
+  descontos REAL NOT NULL DEFAULT 0,
+  lucro REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS produtos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data_add TEXT NOT NULL,
+  nome TEXT NOT NULL,
+  sku TEXT,
+  upc TEXT,
+  asin TEXT,
+  estoque INTEGER NOT NULL DEFAULT 0,
+  custo_base REAL NOT NULL DEFAULT 0,
+  freight REAL NOT NULL DEFAULT 0,
+  tax REAL NOT NULL DEFAULT 0,
+  quantidade INTEGER NOT NULL DEFAULT 0,
+  prep REAL NOT NULL DEFAULT 2,
+  sold_for REAL NOT NULL DEFAULT 0,
+  amazon_fees REAL NOT NULL DEFAULT 0,
+  link_amazon TEXT,
+  link_fornecedor TEXT,
+  data_amz TEXT
+);
+
+CREATE TABLE IF NOT EXISTS amazon_receitas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  produto_id INTEGER,
+  quantidade INTEGER NOT NULL DEFAULT 0,
+  valor_usd REAL NOT NULL DEFAULT 0,
+  quem TEXT,
+  obs TEXT,
+  produto TEXT,
+  sku TEXT,
+  FOREIGN KEY(produto_id) REFERENCES produtos(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS amazon_saldos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  disponivel REAL NOT NULL DEFAULT 0,
+  pendente REAL NOT NULL DEFAULT 0,
+  moeda TEXT NOT NULL DEFAULT 'USD'
+);
+
+CREATE TABLE IF NOT EXISTS amazon_settlements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  data TEXT NOT NULL,
+  amount_usd REAL NOT NULL DEFAULT 0,
+  group_id TEXT,
+  desc TEXT
+);
