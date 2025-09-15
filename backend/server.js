@@ -1,3 +1,5 @@
+// server.js (ESM) — pronto para produção com CORS configurável e healthcheck
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -8,15 +10,61 @@ import { openDb, all, get, run } from "./db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// -----------------------------
+// Configuração básica do app
+// -----------------------------
 const app = express();
-app.use(cors());
+app.disable("x-powered-by");         // menos ruído em produção
+app.set("trust proxy", true);        // útil atrás de proxy/túnel
+
+// ---------- CORS ----------
+/*
+  Defina ALLOWED_ORIGINS na sua .env, separados por vírgula. Exemplos:
+  ALLOWED_ORIGINS=https://www.qotastore.lol,https://qotastore.lol,https://qota-finance.pages.dev
+  Para desenvolvimento local, você pode incluir http://localhost:5173 (ou outra porta).
+*/
+const ORIGINS = (process.env.ALLOWED_ORIGINS || "*")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Sem origem (ex.: curl/postman) — libera
+    if (!origin) return callback(null, true);
+    if (ORIGINS.includes("*")) return callback(null, true);
+    if (ORIGINS.some(o => o === origin)) return callback(null, true);
+    // também aceita subdomínios *.qotastore.lol se você quiser:
+    if (ORIGINS.some(o => o.startsWith("*."))) {
+      const bases = ORIGINS.filter(o => o.startsWith("*.")).map(o => o.slice(1)); // ".qotastore.lol"
+      if (bases.some(base => origin.endsWith(base))) return callback(null, true);
+    }
+    return callback(new Error(`CORS bloqueado para origem: ${origin}`));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "../frontend/finance.db");
+// -----------------------------
+// Banco de dados (SQLite)
+// -----------------------------
+/*
+  Por padrão, seu projeto antigo deixava o .db dentro do frontend.
+  Em produção, é melhor mantê-lo **no backend**. Você pode definir:
+
+  DB_PATH=./data/finance.db   (por exemplo, pasta data/ na raiz do backend)
+
+  Se você quiser manter o padrão antigo momentaneamente, ele cai para ../frontend/finance.db.
+*/
+const DEFAULT_DB = path.join(__dirname, "../frontend/finance.db");
+const DB_PATH = process.env.DB_PATH || DEFAULT_DB;
 const db = openDb(DB_PATH);
 
 // ---------- utils ----------
-const money = (x) => Number.isFinite(+x) ? +x : 0;
+const money = (x) => (Number.isFinite(+x) ? +x : 0);
 const yyyymm = (d) => (d || "").slice(0, 7);
 
 function priceToBuyEff(p) {
@@ -52,7 +100,22 @@ function monthFilterClause(tableDateCol = "data") {
   return " WHERE substr(date(" + tableDateCol + "),1,7) = ? ";
 }
 
-// ---------- endpoints CRUD básicos ----------
+// -----------------------------
+// Healthcheck / Info
+// -----------------------------
+app.get("/healthz", async (_req, res) => {
+  try {
+    // ping simples no banco
+    await get(db, "SELECT 1 as ok");
+    res.json({ ok: true, db: path.basename(DB_PATH) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// -----------------------------
+// Endpoints CRUD básicos
+// -----------------------------
 // Gastos
 app.get("/api/gastos", async (req, res) => {
   const { month } = req.query;
@@ -105,7 +168,6 @@ app.delete("/api/investimentos/:id", async (req, res) => {
 // Produtos
 app.get("/api/produtos", async (req, res) => {
   const { month } = req.query;
-  // usa COALESCE(data_amz,data_add)
   const rows = await all(
     db,
     `SELECT id, COALESCE(data_amz, data_add) as data_add, nome, sku, upc, asin, estoque,
@@ -170,7 +232,7 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
   res.json(out);
 });
 
-// Amazon saldos e settlements (para futuros cards)
+// Amazon saldos (último registro)
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
   const row = await get(db, `SELECT * FROM amazon_saldos ORDER BY date(data) DESC, id DESC LIMIT 1`);
   res.json(row || { disponivel: 0, pendente: 0, moeda: "USD" });
@@ -200,9 +262,7 @@ app.get("/api/metrics/resumo", async (req, res) => {
   const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
                   investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({
-    recUSD, recBRL, despUSD, despBRL
-  });
+  res.json({ recUSD, recBRL, despUSD, despBRL });
 });
 
 app.get("/api/metrics/totais", async (_req, res) => {
@@ -213,9 +273,9 @@ app.get("/api/metrics/totais", async (_req, res) => {
   const prodsAll = await all(db, `SELECT * FROM produtos`);
 
   const comprasUSD = prodsAll.reduce((acc, p) => {
-    const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
-    const total = unit + money(p.freight) + money(p.tax);
-    return acc + total;
+       const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
+       const total = unit + money(p.freight) + money(p.tax);
+       return acc + total;
   }, 0);
 
   const recUSD = amz.reduce((s, r) => s + money(r.valor_usd), 0) + receitas.reduce((s, r) => s + money(r.valor_usd), 0);
@@ -226,9 +286,7 @@ app.get("/api/metrics/totais", async (_req, res) => {
   const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
                   investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({
-    recUSD, recBRL, despUSD, despBRL
-  });
+  res.json({ recUSD, recBRL, despUSD, despBRL });
 });
 
 app.get("/api/metrics/lucros", async (req, res) => {
@@ -246,14 +304,13 @@ app.get("/api/metrics/lucros", async (req, res) => {
 });
 
 // Gráficos simples: receitas x despesas por mês
-app.get("/api/metrics/series", async (req, res) => {
+app.get("/api/metrics/series", async (_req, res) => {
   const amz = await all(db, `SELECT date(data) as data, valor_usd FROM amazon_receitas`);
   const gastos = await all(db, `SELECT date(data) as data, valor_usd FROM gastos`);
   const invest = await all(db, `SELECT date(data) as data, valor_usd FROM investimentos`);
-  // compras por mês (a partir de produtos)
   const prods = await all(db, `SELECT COALESCE(data_amz, data_add) as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`);
 
-  const toMonth = (d) => (d ? d.slice(0,7) : "");
+  const toMonth = (d) => (d ? d.slice(0, 7) : "");
 
   const sumByMonth = (rows) => {
     const m = {};
@@ -263,6 +320,7 @@ app.get("/api/metrics/series", async (req, res) => {
     }
     return m;
   };
+
   const receitasM = sumByMonth(amz);
   const gastosM = sumByMonth(gastos);
   const investM = sumByMonth(invest);
@@ -295,12 +353,8 @@ app.get("/api/metrics/series", async (req, res) => {
   res.json(series);
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log("API rodando na porta " + PORT));
-
-
 // ===== (opcional) teste SP-API =====
-app.get("/api/spapi/test", async (req, res) => {
+app.get("/api/spapi/test", async (_req, res) => {
   try {
     const creds = {
       refresh_token: process.env.SPAPI_REFRESH_TOKEN,
@@ -310,7 +364,12 @@ app.get("/api/spapi/test", async (req, res) => {
       aws_secret_access_key: process.env.AWS_SECRET_ACCESS_KEY,
       role_arn: process.env.AWS_ROLE_ARN // se você usar assumeRole; caso não, remova
     };
-    // lazy import para não quebrar caso pacote não esteja instalado
+
+    // só tenta se tiver pelo menos as chaves principais
+    if (!creds.refresh_token || !creds.lwa_app_id || !creds.lwa_client_secret) {
+      return res.status(400).json({ ok: false, error: "Credenciais SP-API ausentes" });
+    }
+
     const { Sellers, Marketplaces } = await import("amazon-sp-api");
     const sellers = new Sellers({ marketplace: Marketplaces.US, credentials: creds });
     const r = await sellers.getMarketplaceParticipations();
@@ -318,4 +377,13 @@ app.get("/api/spapi/test", async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
+});
+
+// -----------------------------
+// Inicialização do servidor
+// -----------------------------
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`[API] rodando na porta ${PORT}`);
+  console.log(`[DB ] ${DB_PATH}`);
 });
