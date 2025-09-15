@@ -3,7 +3,7 @@
 // =======================================
 
 // ======= Config =======
-const API = "http://localhost:8080/api";
+const API = "https://api.qotastore.lol/api";
 
 // ======= Helpers DOM / formato =======
 const $ = (sel, el = document) => el.querySelector(sel);
