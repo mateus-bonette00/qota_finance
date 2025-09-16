@@ -82,7 +82,7 @@ html, body, *{
   margin: 8px 0 6px;
 }
 .brand__logo{
-  width: 160px; height:auto;
+  width: 280px; height:auto;
   filter: drop-shadow(0 12px 24px rgba(0,0,0,.35));
 }
 .brand__title{
