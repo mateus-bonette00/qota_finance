@@ -353,6 +353,62 @@ app.get("/api/metrics/series", async (_req, res) => {
   res.json(series);
 });
 
+// ==============================
+// Métricas: vendas por produto
+// ==============================
+// GET /api/metrics/products/sales?scope=month|year&order=desc|asc&limit=10&year=YYYY&month=MM
+// - scope=month: agrega no mês/ano informados (padrão = mês/ano atuais)
+// - scope=year:  agrega no ano informado (padrão = ano atual)
+// - order=desc (mais vendidos) | asc (menos vendidos)
+// - limit: número de linhas (padrão 10)
+app.get("/api/metrics/products/sales", async (req, res) => {
+  try {
+    const now = new Date();
+    const scope = (req.query.scope || "month").toLowerCase(); // month | year
+    const order = (req.query.order || "desc").toLowerCase();  // desc | asc
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 50));
+
+    const year = req.query.year || String(now.getFullYear());
+    const month = (req.query.month || String(now.getMonth() + 1)).padStart(2, "0");
+
+    let where = "";
+    let params = [];
+
+    if (scope === "month") {
+      // filtra por mês/ano exatos
+      where = "WHERE strftime('%Y', data) = ? AND strftime('%m', data) = ?";
+      params = [year, month];
+    } else {
+      // year
+      where = "WHERE strftime('%Y', data) = ?";
+      params = [year];
+    }
+
+    // agrega por SKU (ASIN) — se quiser por nome, troque sku por produto
+    const sql = `
+      SELECT 
+        COALESCE(sku, '') AS sku,
+        COALESCE(produto, '') AS produto,
+        SUM(COALESCE(quantidade,0)) AS qty
+      FROM amazon_receitas
+      ${where}
+      GROUP BY sku, produto
+      ORDER BY qty ${order === "asc" ? "ASC" : "DESC"}
+      LIMIT ${limit}
+    `;
+
+    const rows = await all(db, sql, params);
+    res.json(rows.map(r => ({
+      sku: r.sku || "(sem SKU)",
+      produto: r.produto || "",
+      qty: Number(r.qty || 0)
+    })));
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+
 // ===== (opcional) teste SP-API =====
 app.get("/api/spapi/test", async (_req, res) => {
   try {

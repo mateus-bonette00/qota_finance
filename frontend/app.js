@@ -387,20 +387,48 @@ async function renderReceitas(root) {
 // ------- Gráficos -------
 async function renderGraficos(root) {
   const mes = currentMonthStr();
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+
   root.innerHTML = `
-    <h2 class="h3-center">Gráficos Mensais</h2>
+    <h2 class="h3-center">Gráficos</h2>
+
     <div class="row">
       <div class="panel" style="flex:1">
         <h4>Receitas x Despesas (USD) — ${monthLabel(mes)}</h4>
         <canvas id="line"></canvas>
       </div>
       <div class="panel" style="flex:1">
-        <h4>Resultado por mês (USD) — ${monthLabel(mes)}</h4>
+        <h4>Resultado por mês (USD)</h4>
         <canvas id="bars"></canvas>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="panel" style="flex:1">
+        <h4>Top produtos (MÊS) — mais vendidos</h4>
+        <canvas id="topMonth"></canvas>
+      </div>
+      <div class="panel" style="flex:1">
+        <h4>Top produtos (ANO) — mais vendidos</h4>
+        <canvas id="topYear"></canvas>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="panel" style="flex:1">
+        <h4>Bottom produtos (MÊS) — menos vendidos</h4>
+        <canvas id="bottomMonth"></canvas>
+      </div>
+      <div class="panel" style="flex:1">
+        <h4>Bottom produtos (ANO) — menos vendidos</h4>
+        <canvas id="bottomYear"></canvas>
       </div>
     </div>
   `;
 
+  // ======== Gráficos existentes ========
   const series = await api("/metrics/series");
   const meses = series.map((s) => s.mes);
   const receitas = series.map((s) => s.receitas_amz);
@@ -409,21 +437,77 @@ async function renderGraficos(root) {
 
   new Chart($("#line"), {
     type: "line",
-    data: { labels: meses, datasets: [
-      { label: "Receitas (Amazon)", data: receitas },
-      { label: "Despesas Totais", data: despesas },
-    ]},
+    data: {
+      labels: meses,
+      datasets: [
+        { label: "Receitas (Amazon)", data: receitas },
+        { label: "Despesas Totais", data: despesas },
+      ],
+    },
     options: { responsive: true }
   });
 
   new Chart($("#bars"), {
     type: "bar",
-    data: { labels: meses, datasets: [
-      { label: "Resultado", data: resultado },
-    ]},
+    data: { labels: meses, datasets: [{ label: "Resultado", data: resultado }] },
     options: { responsive: true }
   });
+
+  // ======== Helpers dos novos gráficos ========
+  const fetchSales = (scope, order) =>
+    api(`/metrics/products/sales?scope=${scope}&order=${order}&limit=10&year=${year}&month=${month}`);
+
+  const makeHBar = (canvas, rows, title) => {
+    const labels = rows.map(r => r.sku || "(sem SKU)");
+    const data = rows.map(r => r.qty || 0);
+
+    new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{ label: title, data }]
+      },
+      options: {
+        indexAxis: "y",                 // barras horizontais
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true },
+          datalabels: {
+            anchor: "end",
+            align: "right",
+            formatter: (v) => v,        // mostra a QUANTIDADE (não %)
+            clamp: true
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: { precision: 0 }     // inteiros
+          },
+          y: {
+            ticks: { autoSkip: false }  // mostra todos os ASINs quando possível
+          }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+  };
+
+  // ======== Busca dos dados e render ========
+  const [topM, topY, botM, botY] = await Promise.all([
+    fetchSales("month", "desc"), // mais vendidos do mês
+    fetchSales("year",  "desc"), // mais vendidos do ano
+    fetchSales("month", "asc"),  // menos vendidos do mês
+    fetchSales("year",  "asc"),  // menos vendidos do ano
+  ]);
+
+  makeHBar($("#topMonth"),   topM, "Qtd vendida");
+  makeHBar($("#topYear"),    topY, "Qtd vendida");
+  makeHBar($("#bottomMonth"),botM, "Qtd vendida");
+  makeHBar($("#bottomYear"), botY, "Qtd vendida");
 }
+
 
 // ------- Despesas / Investimentos -------
 async function renderDespesas(root) {
