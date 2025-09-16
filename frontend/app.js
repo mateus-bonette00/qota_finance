@@ -456,43 +456,59 @@ async function renderGraficos(root) {
   // ======== Helpers dos novos gráficos ========
   const fetchSales = (scope, order) =>
     api(`/metrics/products/sales?scope=${scope}&order=${order}&limit=10&year=${year}&month=${month}`);
+// === estilo das barras (igual ao print) ===
+const BAR_STROKE = "#3498DB";                  // 100%
+const BAR_FILL   = "rgba(52, 152, 219, 0.32)"; // 32%
 
-  const makeHBar = (canvas, rows, title) => {
-    const labels = rows.map(r => r.sku || "(sem SKU)");
-    const data = rows.map(r => r.qty || 0);
+const makeHBar = (canvas, rows, title) => {
+  const labels = rows.map(r => r.sku || "(sem SKU)");
+  const data   = rows.map(r => r.qty || 0);
 
-    new Chart(canvas, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{ label: title, data }]
-      },
-      options: {
-        indexAxis: "y",                 // barras horizontais
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: true },
-          datalabels: {
-            anchor: "end",
-            align: "right",
-            formatter: (v) => v,        // mostra a QUANTIDADE (não %)
-            clamp: true
-          }
-        },
-        scales: {
-          x: {
-            beginAtZero: true,
-            ticks: { precision: 0 }     // inteiros
-          },
-          y: {
-            ticks: { autoSkip: false }  // mostra todos os ASINs quando possível
-          }
+  new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: title,
+        data,
+        backgroundColor: BAR_FILL,      // fill 32%
+        borderColor: BAR_STROKE,        // stroke 100%
+        borderWidth: 1,
+        borderSkipped: false,
+        borderAlign: "inner",           // borda "por dentro"
+        barThickness: 22,               // opcional: ajusta altura da barra
+        hoverBackgroundColor: BAR_FILL,
+        hoverBorderColor: BAR_STROKE
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: true },
+        datalabels: {
+          anchor: "end",
+          align: "right",
+          formatter: (v) => v,          // mostra QUANTIDADE (não %)
+          clamp: true,
+          color: BAR_STROKE,            // número na cor da borda
+          font: { weight: 600 }
         }
       },
-      plugins: [ChartDataLabels]
-    });
-  };
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { precision: 0 }       // inteiros
+        },
+        y: {
+          ticks: { autoSkip: false }    // tenta exibir todos os ASINs
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+};
 
   // ======== Busca dos dados e render ========
   const [topM, topY, botM, botY] = await Promise.all([
