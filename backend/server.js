@@ -1,70 +1,24 @@
-// server.js (ESM) — pronto para produção com CORS configurável e healthcheck
-
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { openDb, all, get, run } from "./db.js";
+
+// >>> Importa o adaptador Postgres (não mais o db.js de SQLite)
+import { openDb, all, get, run } from "./db.pg.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// -----------------------------
-// Configuração básica do app
-// -----------------------------
 const app = express();
-app.disable("x-powered-by");         // menos ruído em produção
-app.set("trust proxy", true);        // útil atrás de proxy/túnel
-
-// ---------- CORS ----------
-/*
-  Defina ALLOWED_ORIGINS na sua .env, separados por vírgula. Exemplos:
-  ALLOWED_ORIGINS=https://www.qotastore.lol,https://qotastore.lol,https://qota-finance.pages.dev
-  Para desenvolvimento local, você pode incluir http://localhost:5173 (ou outra porta).
-*/
-const ORIGINS = (process.env.ALLOWED_ORIGINS || "*")
-  .split(",")
-  .map(s => s.trim())
-  .filter(Boolean);
-
-const corsOptions = {
-  origin(origin, callback) {
-    // Sem origem (ex.: curl/postman) — libera
-    if (!origin) return callback(null, true);
-    if (ORIGINS.includes("*")) return callback(null, true);
-    if (ORIGINS.some(o => o === origin)) return callback(null, true);
-    // também aceita subdomínios *.qotastore.lol se você quiser:
-    if (ORIGINS.some(o => o.startsWith("*."))) {
-      const bases = ORIGINS.filter(o => o.startsWith("*.")).map(o => o.slice(1)); // ".qotastore.lol"
-      if (bases.some(base => origin.endsWith(base))) return callback(null, true);
-    }
-    return callback(new Error(`CORS bloqueado para origem: ${origin}`));
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  credentials: true,
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
 
-// -----------------------------
-// Banco de dados (SQLite)
-// -----------------------------
-/*
-  Por padrão, seu projeto antigo deixava o .db dentro do frontend.
-  Em produção, é melhor mantê-lo **no backend**. Você pode definir:
-
-  DB_PATH=./data/finance.db   (por exemplo, pasta data/ na raiz do backend)
-
-  Se você quiser manter o padrão antigo momentaneamente, ele cai para ../frontend/finance.db.
-*/
-const DEFAULT_DB = path.join(__dirname, "../frontend/finance.db");
-const DB_PATH = process.env.DB_PATH || DEFAULT_DB;
-const db = openDb(DB_PATH);
+// >>> Postgres: não há mais DB_PATH; apenas abre o pool:
+const db = openDb();
 
 // ---------- utils ----------
-const money = (x) => (Number.isFinite(+x) ? +x : 0);
+const money = (x) => Number.isFinite(+x) ? +x : 0;
 const yyyymm = (d) => (d || "").slice(0, 7);
 
 function priceToBuyEff(p) {
@@ -96,32 +50,18 @@ async function sumProfit(receipts, products) {
 }
 
 // --------- filtros comuns ---------
+// >>> Postgres: filtra mês com to_char(col::date,'YYYY-MM')
 function monthFilterClause(tableDateCol = "data") {
-  return " WHERE substr(date(" + tableDateCol + "),1,7) = ? ";
+  return ` WHERE to_char(${tableDateCol}::date, 'YYYY-MM') = ? `;
 }
 
-// -----------------------------
-// Healthcheck / Info
-// -----------------------------
-app.get("/healthz", async (_req, res) => {
-  try {
-    // ping simples no banco
-    await get(db, "SELECT 1 as ok");
-    res.json({ ok: true, db: path.basename(DB_PATH) });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-// -----------------------------
-// Endpoints CRUD básicos
-// -----------------------------
+// ---------- endpoints CRUD básicos ----------
 // Gastos
 app.get("/api/gastos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT * FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY date(data) DESC, id DESC`,
+    `SELECT * FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -146,7 +86,7 @@ app.get("/api/investimentos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT * FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY date(data) DESC, id DESC`,
+    `SELECT * FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -168,6 +108,7 @@ app.delete("/api/investimentos/:id", async (req, res) => {
 // Produtos
 app.get("/api/produtos", async (req, res) => {
   const { month } = req.query;
+  // usa COALESCE(data_amz,data_add)
   const rows = await all(
     db,
     `SELECT id, COALESCE(data_amz, data_add) as data_add, nome, sku, upc, asin, estoque,
@@ -175,7 +116,7 @@ app.get("/api/produtos", async (req, res) => {
             link_amazon, link_fornecedor
      FROM produtos
      ${month ? monthFilterClause("COALESCE(data_amz,data_add)") : ""}
-     ORDER BY date(COALESCE(data_amz, data_add)) DESC, id DESC`,
+     ORDER BY (COALESCE(data_amz, data_add))::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -206,7 +147,7 @@ app.get("/api/amazon_receitas", async (req, res) => {
     `SELECT id, data, produto_id, quantidade, valor_usd, quem, obs, sku, produto
      FROM amazon_receitas
      ${month ? monthFilterClause("data") : ""}
-     ORDER BY date(data) DESC, id DESC`,
+     ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -222,7 +163,7 @@ app.post("/api/amazon_receitas", async (req, res) => {
 
   // reduz estoque se vier produto_id
   if (r.produto_id) {
-    await run(db, "UPDATE produtos SET estoque = MAX(0, estoque - ?) WHERE id = ?",
+    await run(db, "UPDATE produtos SET estoque = GREATEST(0, estoque - ?) WHERE id = ?",
       [Number(r.quantidade||0), Number(r.produto_id)]);
   }
   res.json(out);
@@ -232,9 +173,9 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
   res.json(out);
 });
 
-// Amazon saldos (último registro)
+// Amazon saldos e settlements (para futuros cards)
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
-  const row = await get(db, `SELECT * FROM amazon_saldos ORDER BY date(data) DESC, id DESC LIMIT 1`);
+  const row = await get(db, `SELECT * FROM amazon_saldos ORDER BY (data)::date DESC, id DESC LIMIT 1`);
   res.json(row || { disponivel: 0, pendente: 0, moeda: "USD" });
 });
 
@@ -262,7 +203,9 @@ app.get("/api/metrics/resumo", async (req, res) => {
   const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
                   investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({ recUSD, recBRL, despUSD, despBRL });
+  res.json({
+    recUSD, recBRL, despUSD, despBRL
+  });
 });
 
 app.get("/api/metrics/totais", async (_req, res) => {
@@ -273,9 +216,9 @@ app.get("/api/metrics/totais", async (_req, res) => {
   const prodsAll = await all(db, `SELECT * FROM produtos`);
 
   const comprasUSD = prodsAll.reduce((acc, p) => {
-       const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
-       const total = unit + money(p.freight) + money(p.tax);
-       return acc + total;
+    const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
+    const total = unit + money(p.freight) + money(p.tax);
+    return acc + total;
   }, 0);
 
   const recUSD = amz.reduce((s, r) => s + money(r.valor_usd), 0) + receitas.reduce((s, r) => s + money(r.valor_usd), 0);
@@ -286,7 +229,9 @@ app.get("/api/metrics/totais", async (_req, res) => {
   const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
                   investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({ recUSD, recBRL, despUSD, despBRL });
+  res.json({
+    recUSD, recBRL, despUSD, despBRL
+  });
 });
 
 app.get("/api/metrics/lucros", async (req, res) => {
@@ -304,13 +249,15 @@ app.get("/api/metrics/lucros", async (req, res) => {
 });
 
 // Gráficos simples: receitas x despesas por mês
-app.get("/api/metrics/series", async (_req, res) => {
-  const amz = await all(db, `SELECT date(data) as data, valor_usd FROM amazon_receitas`);
-  const gastos = await all(db, `SELECT date(data) as data, valor_usd FROM gastos`);
-  const invest = await all(db, `SELECT date(data) as data, valor_usd FROM investimentos`);
-  const prods = await all(db, `SELECT COALESCE(data_amz, data_add) as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`);
+app.get("/api/metrics/series", async (req, res) => {
+  // >>> Garantir string 'YYYY-MM-DD' para não vir Date do driver
+  const amz = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM amazon_receitas`);
+  const gastos = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM gastos`);
+  const invest = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM investimentos`);
+  // compras por mês (a partir de produtos)
+  const prods = await all(db, `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`);
 
-  const toMonth = (d) => (d ? d.slice(0, 7) : "");
+  const toMonth = (d) => (d ? d.slice(0,7) : "");
 
   const sumByMonth = (rows) => {
     const m = {};
@@ -320,7 +267,6 @@ app.get("/api/metrics/series", async (_req, res) => {
     }
     return m;
   };
-
   const receitasM = sumByMonth(amz);
   const gastosM = sumByMonth(gastos);
   const investM = sumByMonth(invest);
@@ -353,64 +299,11 @@ app.get("/api/metrics/series", async (_req, res) => {
   res.json(series);
 });
 
-// ==============================
-// Métricas: vendas por produto
-// ==============================
-// GET /api/metrics/products/sales?scope=month|year&order=desc|asc&limit=10&year=YYYY&month=MM
-// - scope=month: agrega no mês/ano informados (padrão = mês/ano atuais)
-// - scope=year:  agrega no ano informado (padrão = ano atual)
-// - order=desc (mais vendidos) | asc (menos vendidos)
-// - limit: número de linhas (padrão 10)
-app.get("/api/metrics/products/sales", async (req, res) => {
-  try {
-    const now = new Date();
-    const scope = (req.query.scope || "month").toLowerCase(); // month | year
-    const order = (req.query.order || "desc").toLowerCase();  // desc | asc
-    const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 50));
-
-    const year = req.query.year || String(now.getFullYear());
-    const month = (req.query.month || String(now.getMonth() + 1)).padStart(2, "0");
-
-    let where = "";
-    let params = [];
-
-    if (scope === "month") {
-      // filtra por mês/ano exatos
-      where = "WHERE strftime('%Y', data) = ? AND strftime('%m', data) = ?";
-      params = [year, month];
-    } else {
-      // year
-      where = "WHERE strftime('%Y', data) = ?";
-      params = [year];
-    }
-
-    // agrega por SKU (ASIN) — se quiser por nome, troque sku por produto
-    const sql = `
-      SELECT 
-        COALESCE(sku, '') AS sku,
-        COALESCE(produto, '') AS produto,
-        SUM(COALESCE(quantidade,0)) AS qty
-      FROM amazon_receitas
-      ${where}
-      GROUP BY sku, produto
-      ORDER BY qty ${order === "asc" ? "ASC" : "DESC"}
-      LIMIT ${limit}
-    `;
-
-    const rows = await all(db, sql, params);
-    res.json(rows.map(r => ({
-      sku: r.sku || "(sem SKU)",
-      produto: r.produto || "",
-      qty: Number(r.qty || 0)
-    })));
-  } catch (err) {
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
-  }
-});
-
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("API rodando na porta " + PORT));
 
 // ===== (opcional) teste SP-API =====
-app.get("/api/spapi/test", async (_req, res) => {
+app.get("/api/spapi/test", async (req, res) => {
   try {
     const creds = {
       refresh_token: process.env.SPAPI_REFRESH_TOKEN,
@@ -420,12 +313,7 @@ app.get("/api/spapi/test", async (_req, res) => {
       aws_secret_access_key: process.env.AWS_SECRET_ACCESS_KEY,
       role_arn: process.env.AWS_ROLE_ARN // se você usar assumeRole; caso não, remova
     };
-
-    // só tenta se tiver pelo menos as chaves principais
-    if (!creds.refresh_token || !creds.lwa_app_id || !creds.lwa_client_secret) {
-      return res.status(400).json({ ok: false, error: "Credenciais SP-API ausentes" });
-    }
-
+    // lazy import para não quebrar caso pacote não esteja instalado
     const { Sellers, Marketplaces } = await import("amazon-sp-api");
     const sellers = new Sellers({ marketplace: Marketplaces.US, credentials: creds });
     const r = await sellers.getMarketplaceParticipations();
@@ -433,13 +321,4 @@ app.get("/api/spapi/test", async (_req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
-});
-
-// -----------------------------
-// Inicialização do servidor
-// -----------------------------
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`[API] rodando na porta ${PORT}`);
-  console.log(`[DB ] ${DB_PATH}`);
 });
