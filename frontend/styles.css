@@ -348,6 +348,10 @@ select optgroup {
 /* Remove a setinha do IE/Edge legado (não afeta modernos) */
 select::-ms-expand { display: none; }
 
+
+.kpi-card .txt .usd.pos, .kpi-card .txt .brl.pos { color: var(--green); }
+.kpi-card .txt .usd.neg, .kpi-card .txt .brl.neg { color: var(--red); }
+
 /* --------- Responsivo --------- */
 @media (max-width: 1200px){
   .kpi-row3{ grid-template-columns:1fr; }

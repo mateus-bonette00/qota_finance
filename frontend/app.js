@@ -21,6 +21,8 @@ const fmtBRL = (x) =>
     maximumFractionDigits: 2,
   })}`;
 
+const signCls = (x) => (Number(x) > 0 ? "pos" : Number(x) < 0 ? "neg" : "");
+
 const MESES_PT = [
   "janeiro",
   "fevereiro",
@@ -122,16 +124,22 @@ const ICONS = {
 function kpiCardHTML(kind, label, usd, brl) {
   const icon =
     kind === "receita" ? ICONS.up : kind === "despesa" ? ICONS.down : ICONS.coin;
+
+  // aplica classe apenas no card de resultado
+  const usdCls = kind === "result" ? signCls(usd) : "";
+  const brlCls = kind === "result" ? signCls(brl) : "";
+
   return `
     <div class="kpi-card ${kind}">
       <div class="ico"><img src="${icon}" alt=""></div>
       <div class="txt">
         <div class="lbl">${label}</div>
-        <div class="usd">USD: ${fmtUSD(usd).replace("$ ","$ ")}</div>
-        <div class="brl">BRL: ${fmtBRL(brl).replace("R$ ","R$ ")}</div>
+        <div class="usd ${usdCls}">USD: ${fmtUSD(usd).replace("$ ","$ ")}</div>
+        <div class="brl ${brlCls}">BRL: ${fmtBRL(brl).replace("R$ ","R$ ")}</div>
       </div>
     </div>`;
 }
+
 
 // Linha com 3 KPIs
 function kpiRow3HTML(items) {
