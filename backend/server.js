@@ -10,7 +10,7 @@ import { openDb, all, get, run } from "./db.pg.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// pasta pública (está dentro de backend/public)
+// Public: sua SPA está em ./public
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const app = express();
@@ -35,7 +35,10 @@ app.use(
 // ---------- Anti-cache somente para a API ----------
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     res.setHeader("Surrogate-Control", "no-store");
@@ -64,51 +67,10 @@ app.get(
 const db = openDb();
 
 // ---------- utils ----------
-const money = (x) => (Number.isFinite(+x) ? +x : 0);
+const money  = (x) => (Number.isFinite(+x) ? +x : 0);
+const yyyymm = (d) => (d ? String(d) : "").slice(0, 7); // YYYY-MM seguro para Date/string
 
-// normaliza valor para string "YYYY-MM-DD"
-function asDateString(d) {
-  if (!d) return "";
-  if (typeof d === "string") return d;
-  const t = d instanceof Date ? d : new Date(d);
-  if (!isNaN(t)) {
-    const y = t.getUTCFullYear();
-    const m = String(t.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(t.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }
-  return String(d);
-}
-const yyyymm = (d) => asDateString(d).slice(0, 7); // "YYYY-MM"
-
-const priceToBuyEff = (p) => {
-  const base = money(p.custo_base);
-  const tax = money(p.tax);
-  const freight = money(p.freight);
-  const qty = money(p.quantidade);
-  const rateio = qty > 0 ? (tax + freight) / qty : 0;
-  return base + rateio;
-};
-const grossProfitUnit = (p) => {
-  const sold_for = money(p.sold_for);
-  const amz = money(p.amazon_fees);
-  const prep = money(p.prep);
-  const p2b = priceToBuyEff(p);
-  return sold_for - amz - prep - p2b;
-};
-async function sumProfit(receipts, products) {
-  const byId = new Map(products.map((p) => [p.id, p]));
-  let total = 0;
-  for (const r of receipts) {
-    const prod = byId.get(r.produto_id);
-    if (!prod) continue;
-    const gp = grossProfitUnit(prod);
-    total += gp * money(r.quantidade);
-  }
-  return total;
-}
-
-// --------- filtros comuns ---------
+// Filtro por mês usando to_char
 function monthFilterClause(tableDateCol = "data") {
   return ` WHERE to_char(${tableDateCol}::date, 'YYYY-MM') = ? `;
 }
@@ -119,8 +81,7 @@ app.get("/api/gastos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, categoria, descricao, valor_brl, valor_usd, metodo, conta, quem
-     FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
+    `SELECT * FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -151,8 +112,7 @@ app.get("/api/investimentos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, valor_brl, valor_usd, metodo, conta, quem
-     FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
+    `SELECT * FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -181,9 +141,7 @@ app.get("/api/produtos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id,
-            to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') AS data_add,
-            nome, sku, upc, asin, estoque,
+    `SELECT id, COALESCE(data_amz, data_add) as data_add, nome, sku, upc, asin, estoque,
             custo_base, freight, tax, quantidade, prep, sold_for, amazon_fees,
             link_amazon, link_fornecedor
      FROM produtos
@@ -228,9 +186,7 @@ app.get("/api/amazon_receitas", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id,
-            to_char(data::date,'YYYY-MM-DD') AS data,
-            produto_id, quantidade, valor_usd, quem, obs, sku, produto
+    `SELECT id, data, produto_id, quantidade, valor_usd, quem, obs, sku, produto
      FROM amazon_receitas
      ${month ? monthFilterClause("data") : ""}
      ORDER BY (data)::date DESC, id DESC`,
@@ -253,6 +209,7 @@ app.post("/api/amazon_receitas", async (req, res) => {
     r.produto || "",
   ]);
 
+  // reduz estoque se vier produto_id
   if (r.produto_id) {
     await run(db, "UPDATE produtos SET estoque = GREATEST(0, estoque - ?) WHERE id = ?", [
       Number(r.quantidade || 0),
@@ -270,11 +227,7 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
   const row = await get(
     db,
-    `SELECT id, disponivel, pendente, moeda,
-            to_char(data::date,'YYYY-MM-DD') AS data
-     FROM amazon_saldos
-     ORDER BY (data)::date DESC, id DESC
-     LIMIT 1`
+    `SELECT * FROM amazon_saldos ORDER BY (data)::date DESC, id DESC LIMIT 1`
   );
   res.json(row || { disponivel: 0, pendente: 0, moeda: "USD" });
 });
@@ -323,7 +276,8 @@ app.get("/api/metrics/resumo", async (req, res) => {
     investimentos.reduce((s, r) => s + money(r.valor_usd), 0) +
     comprasUSD;
   const despBRL =
-    gastos.reduce((s, r) => s + money(r.valor_brl), 0) + investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
+    gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
+    investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
   res.json({ recUSD, recBRL, despUSD, despBRL });
 });
@@ -349,7 +303,8 @@ app.get("/api/metrics/totais", async (_req, res) => {
     investimentos.reduce((s, r) => s + money(r.valor_usd), 0) +
     comprasUSD;
   const despBRL =
-    gastos.reduce((s, r) => s + money(r.valor_brl), 0) + investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
+    gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
+    investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
   res.json({ recUSD, recBRL, despUSD, despBRL });
 });
@@ -359,64 +314,121 @@ app.get("/api/metrics/lucros", async (req, res) => {
 
   const amzAll = await all(
     db,
-    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, produto_id, quantidade, valor_usd, sku, produto
-     FROM amazon_receitas`
+    `SELECT id, data, produto_id, quantidade, valor_usd, sku, produto FROM amazon_receitas`
   );
   const prodsAll = await all(db, `SELECT * FROM produtos`);
 
   const periodReceipts = month ? amzAll.filter((r) => yyyymm(r.data) === month) : amzAll;
 
-  const lucroPeriodo = await sumProfit(periodReceipts, prodsAll);
-  const lucroTotal = await sumProfit(amzAll, prodsAll);
+  const byId = new Map(prodsAll.map((p) => [p.id, p]));
+  const priceToBuyEff = (p) => {
+    const base = money(p.custo_base);
+    const tax = money(p.tax);
+    const freight = money(p.freight);
+    const qty = money(p.quantidade);
+    const rateio = qty > 0 ? (tax + freight) / qty : 0;
+    return base + rateio;
+  };
+  const grossProfitUnit = (p) => {
+    const sold_for = money(p.sold_for);
+    const amz = money(p.amazon_fees);
+    const prep = money(p.prep);
+    const p2b = priceToBuyEff(p);
+    return sold_for - amz - prep - p2b;
+  };
+  async function sumProfit(receipts, productsMap) {
+    let total = 0;
+    for (const r of receipts) {
+      const prod = productsMap.get(r.produto_id);
+      if (!prod) continue;
+      const gp = grossProfitUnit(prod);
+      total += gp * money(r.quantidade);
+    }
+    return total;
+  }
+
+  const lucroPeriodo = await sumProfit(periodReceipts, byId);
+  const lucroTotal = await sumProfit(amzAll, byId);
 
   res.json({ lucroPeriodo, lucroTotal });
 });
 
-// --------- NOVO: vendas por produto (para os gráficos Top/Bottom) ---------
-app.get("/api/metrics/products/sales", async (req, res) => {
-  // scope: "month" | "year"
-  // order: "desc" | "asc"
-  // limit: número (default 10)
-  // year/month (para escopo month)
-  const scope = (req.query.scope || "month").toLowerCase();
-  const order = (req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
-  const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 50));
-
-  let where = "";
-  const params = [];
-
-  if (scope === "year") {
-    const year = String(req.query.year || new Date().getUTCFullYear());
-    where = "WHERE to_char(data::date,'YYYY') = ?";
-    params.push(year);
-  } else {
-    // month
-    const y = String(req.query.year || new Date().getUTCFullYear());
-    const m = String(req.query.month || new Date().getUTCMonth() + 1).padStart(2, "0");
-    where = "WHERE to_char(data::date,'YYYY-MM') = ?";
-    params.push(`${y}-${m}`);
-  }
-
-  const rows = await all(
+// --------- SÉRIE MENSAL: receitas x despesas x resultado ---------
+app.get("/api/metrics/series", async (_req, res) => {
+  // 1) Buscamos as linhas já como string YYYY-MM-DD para evitar Date
+  const amz = await all(
     db,
-    `
-    SELECT
-      NULLIF(TRIM(COALESCE(sku,'')), '') AS sku,
-      SUM(COALESCE(quantidade,0))::int AS qty
-    FROM amazon_receitas
-    ${where}
-    GROUP BY sku
-    ORDER BY qty ${order}
-    LIMIT ${limit}
-    `,
-    params
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
+     FROM amazon_receitas`
+  );
+  const gastos = await all(
+    db,
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
+     FROM gastos`
+  );
+  const invest = await all(
+    db,
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
+     FROM investimentos`
+  );
+  // compras (a partir dos produtos): usamos COALESCE(data_amz, data_add)
+  const prods = await all(
+    db,
+    `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add,
+            custo_base, prep, amazon_fees, quantidade, freight, tax
+     FROM produtos`
   );
 
-  // normaliza sku vazio
-  const out = rows.map((r) => ({
-    sku: r.sku || "(sem SKU)",
-    qty: Number(r.qty || 0),
-  }));
+  const toMonth = (d) => (d ? String(d).slice(0, 7) : ""); // YYYY-MM
+
+  const sumByMonthSimple = (rows) => {
+    const m = {};
+    for (const r of rows) {
+      const k = toMonth(r.data);
+      m[k] = (m[k] || 0) + money(r.valor_usd);
+    }
+    return m;
+  };
+
+  // receitas (Amazon) por mês
+  const receitasM = sumByMonthSimple(amz);
+  // gastos/ investimentos por mês
+  const gastosM = sumByMonthSimple(gastos);
+  const investM = sumByMonthSimple(invest);
+
+  // compras por mês (deriva dos produtos)
+  const comprasM = {};
+  for (const p of prods) {
+    const k = toMonth(p.data_add);
+    const qty = money(p.quantidade);
+    const unit = money(p.custo_base) + money(p.prep) + money(p.amazon_fees);
+    const total = unit * qty + money(p.freight) + money(p.tax);
+    comprasM[k] = (comprasM[k] || 0) + total;
+  }
+
+  // meses presentes em qualquer série
+  const meses = Array.from(
+    new Set([
+      ...Object.keys(receitasM),
+      ...Object.keys(gastosM),
+      ...Object.keys(investM),
+      ...Object.keys(comprasM),
+    ])
+  )
+    .filter(Boolean)
+    .sort();
+
+  // monta a série final
+  const out = meses.map((m) => {
+    const despesasTotais =
+      (gastosM[m] || 0) + (investM[m] || 0) + (comprasM[m] || 0);
+    return {
+      mes: m,
+      receitas_amz: receitasM[m] || 0,
+      despesas_totais: despesasTotais,
+      resultado: (receitasM[m] || 0) - despesasTotais,
+    };
+  });
 
   res.json(out);
 });
