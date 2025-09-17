@@ -1,21 +1,38 @@
+// ===== Qota Finance - Backend (Node/Express + Postgres) =====
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-
-// >>> Importa o adaptador Postgres (não mais o db.js de SQLite)
 import { openDb, all, get, run } from "./db.pg.js";
 
+// --- paths auxiliares ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// *** ATENÇÃO: seu front está em frontend/public ***
+const PUBLIC_DIR = path.join(__dirname, "..", "frontend", "public");
+
 const app = express();
-app.use(cors());
 app.use(express.json());
 
+// ---------- CORS (lendo ALLOWED_ORIGINS) ----------
+const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
 
-// ====== Anti-cache para API ======
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || ALLOWED.includes(origin)) return cb(null, true);
+      return cb(new Error("CORS blocked"));
+    },
+    credentials: true,
+  })
+);
+
+// ---------- Anti-cache somente para a API ----------
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -26,13 +43,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ====== Servir SPA com headers de cache corretos ======
-import express from "express";
-import path from "path";
-
-const PUBLIC_DIR = path.join(__dirname, "..", "public");
-
-// 1) Assets com cache longo (immutable)
+// ---------- Servir SPA com cache correto ----------
 app.use((req, res, next) => {
   if (/\.(?:js|css|png|jpg|jpeg|svg|webp|ico|woff2?)$/i.test(req.path)) {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
@@ -41,36 +52,35 @@ app.use((req, res, next) => {
 });
 app.use(express.static(PUBLIC_DIR, { index: false, etag: true, lastModified: true }));
 
-// 2) HTML SEM cache (SPA fallback)
-app.get(["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos", "/#/.*"], (_req, res) => {
-  res.setHeader("Cache-Control", "no-cache");
-  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-});
+app.get(
+  ["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos", "/#/.*"],
+  (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+  }
+);
 
-
-// >>> Postgres: não há mais DB_PATH; apenas abre o pool:
+// ---------- DB ----------
 const db = openDb();
 
 // ---------- utils ----------
-const money = (x) => Number.isFinite(+x) ? +x : 0;
+const money = (x) => (Number.isFinite(+x) ? +x : 0);
 const yyyymm = (d) => (d || "").slice(0, 7);
-
-function priceToBuyEff(p) {
+const priceToBuyEff = (p) => {
   const base = money(p.custo_base);
   const tax = money(p.tax);
   const freight = money(p.freight);
   const qty = money(p.quantidade);
   const rateio = qty > 0 ? (tax + freight) / qty : 0;
   return base + rateio;
-}
-function grossProfitUnit(p) {
+};
+const grossProfitUnit = (p) => {
   const sold_for = money(p.sold_for);
   const amz = money(p.amazon_fees);
   const prep = money(p.prep);
   const p2b = priceToBuyEff(p);
   return sold_for - amz - prep - p2b;
-}
-
+};
 async function sumProfit(receipts, products) {
   const byId = new Map(products.map((p) => [p.id, p]));
   let total = 0;
@@ -84,12 +94,11 @@ async function sumProfit(receipts, products) {
 }
 
 // --------- filtros comuns ---------
-// >>> Postgres: filtra mês com to_char(col::date,'YYYY-MM')
 function monthFilterClause(tableDateCol = "data") {
   return ` WHERE to_char(${tableDateCol}::date, 'YYYY-MM') = ? `;
 }
 
-// ---------- endpoints CRUD básicos ----------
+// ---------- endpoints CRUD ----------
 // Gastos
 app.get("/api/gastos", async (req, res) => {
   const { month } = req.query;
@@ -105,8 +114,14 @@ app.post("/api/gastos", async (req, res) => {
   const sql = `INSERT INTO gastos (data,categoria,descricao,valor_brl,valor_usd,metodo,conta,quem)
                VALUES (?,?,?,?,?,?,?,?)`;
   const out = await run(db, sql, [
-    r.data, r.categoria, r.descricao || "", money(r.valor_brl), money(r.valor_usd),
-    r.metodo || "", r.conta || "", r.quem || ""
+    r.data,
+    r.categoria,
+    r.descricao || "",
+    money(r.valor_brl),
+    money(r.valor_usd),
+    r.metodo || "",
+    r.conta || "",
+    r.quem || "",
   ]);
   res.json(out);
 });
@@ -130,7 +145,12 @@ app.post("/api/investimentos", async (req, res) => {
   const sql = `INSERT INTO investimentos (data,valor_brl,valor_usd,metodo,conta,quem)
                VALUES (?,?,?,?,?,?)`;
   const out = await run(db, sql, [
-    r.data, money(r.valor_brl), money(r.valor_usd), r.metodo || "", r.conta || "", r.quem || ""
+    r.data,
+    money(r.valor_brl),
+    money(r.valor_usd),
+    r.metodo || "",
+    r.conta || "",
+    r.quem || "",
   ]);
   res.json(out);
 });
@@ -142,7 +162,6 @@ app.delete("/api/investimentos/:id", async (req, res) => {
 // Produtos
 app.get("/api/produtos", async (req, res) => {
   const { month } = req.query;
-  // usa COALESCE(data_amz,data_add)
   const rows = await all(
     db,
     `SELECT id, COALESCE(data_amz, data_add) as data_add, nome, sku, upc, asin, estoque,
@@ -161,10 +180,22 @@ app.post("/api/produtos", async (req, res) => {
     (data_add,nome,sku,upc,asin,estoque,custo_base,freight,tax,quantidade,prep,sold_for,amazon_fees,link_amazon,link_fornecedor,data_amz)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
   const out = await run(db, sql, [
-    r.data_add, r.nome, r.sku || "", r.upc || "", r.asin || "",
-    Number(r.estoque||0), money(r.custo_base), money(r.freight), money(r.tax),
-    Number(r.quantidade||0), money(r.prep ?? 2), money(r.sold_for), money(r.amazon_fees),
-    r.link_amazon||"", r.link_fornecedor||"", r.data_amz || null
+    r.data_add,
+    r.nome,
+    r.sku || "",
+    r.upc || "",
+    r.asin || "",
+    Number(r.estoque || 0),
+    money(r.custo_base),
+    money(r.freight),
+    money(r.tax),
+    Number(r.quantidade || 0),
+    money(r.prep ?? 2),
+    money(r.sold_for),
+    money(r.amazon_fees),
+    r.link_amazon || "",
+    r.link_fornecedor || "",
+    r.data_amz || null,
   ]);
   res.json(out);
 });
@@ -191,14 +222,21 @@ app.post("/api/amazon_receitas", async (req, res) => {
   const sql = `INSERT INTO amazon_receitas (data,produto_id,quantidade,valor_usd,quem,obs,sku,produto)
                VALUES (?,?,?,?,?,?,?,?)`;
   const out = await run(db, sql, [
-    r.data, r.produto_id ?? null, Number(r.quantidade||0),
-    money(r.valor_usd), r.quem || "", r.obs || "", r.sku || "", r.produto || ""
+    r.data,
+    r.produto_id ?? null,
+    Number(r.quantidade || 0),
+    money(r.valor_usd),
+    r.quem || "",
+    r.obs || "",
+    r.sku || "",
+    r.produto || "",
   ]);
 
-  // reduz estoque se vier produto_id
   if (r.produto_id) {
-    await run(db, "UPDATE produtos SET estoque = GREATEST(0, estoque - ?) WHERE id = ?",
-      [Number(r.quantidade||0), Number(r.produto_id)]);
+    await run(db, "UPDATE produtos SET estoque = GREATEST(0, estoque - ?) WHERE id = ?", [
+      Number(r.quantidade || 0),
+      Number(r.produto_id),
+    ]);
   }
   res.json(out);
 });
@@ -232,14 +270,14 @@ app.get("/api/metrics/resumo", async (req, res) => {
   const recUSD = amz.reduce((s, r) => s + money(r.valor_usd), 0) + receitas.reduce((s, r) => s + money(r.valor_usd), 0);
   const recBRL = receitas.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  const despUSD = gastos.reduce((s, r) => s + money(r.valor_usd), 0) +
-                  investimentos.reduce((s, r) => s + money(r.valor_usd), 0) + comprasUSD;
-  const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
-                  investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
+  const despUSD =
+    gastos.reduce((s, r) => s + money(r.valor_usd), 0) +
+    investimentos.reduce((s, r) => s + money(r.valor_usd), 0) +
+    comprasUSD;
+  const despBRL =
+    gastos.reduce((s, r) => s + money(r.valor_brl), 0) + investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({
-    recUSD, recBRL, despUSD, despBRL
-  });
+  res.json({ recUSD, recBRL, despUSD, despBRL });
 });
 
 app.get("/api/metrics/totais", async (_req, res) => {
@@ -258,14 +296,14 @@ app.get("/api/metrics/totais", async (_req, res) => {
   const recUSD = amz.reduce((s, r) => s + money(r.valor_usd), 0) + receitas.reduce((s, r) => s + money(r.valor_usd), 0);
   const recBRL = receitas.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  const despUSD = gastos.reduce((s, r) => s + money(r.valor_usd), 0) +
-                  investimentos.reduce((s, r) => s + money(r.valor_usd), 0) + comprasUSD;
-  const despBRL = gastos.reduce((s, r) => s + money(r.valor_brl), 0) +
-                  investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
+  const despUSD =
+    gastos.reduce((s, r) => s + money(r.valor_usd), 0) +
+    investimentos.reduce((s, r) => s + money(r.valor_usd), 0) +
+    comprasUSD;
+  const despBRL =
+    gastos.reduce((s, r) => s + money(r.valor_brl), 0) + investimentos.reduce((s, r) => s + money(r.valor_brl), 0);
 
-  res.json({
-    recUSD, recBRL, despUSD, despBRL
-  });
+  res.json({ recUSD, recBRL, despUSD, despBRL });
 });
 
 app.get("/api/metrics/lucros", async (req, res) => {
@@ -274,7 +312,7 @@ app.get("/api/metrics/lucros", async (req, res) => {
   const amzAll = await all(db, `SELECT id, data, produto_id, quantidade, valor_usd, sku, produto FROM amazon_receitas`);
   const prodsAll = await all(db, `SELECT * FROM produtos`);
 
-  const periodReceipts = month ? amzAll.filter(r => yyyymm(r.data) === month) : amzAll;
+  const periodReceipts = month ? amzAll.filter((r) => yyyymm(r.data) === month) : amzAll;
 
   const lucroPeriodo = await sumProfit(periodReceipts, prodsAll);
   const lucroTotal = await sumProfit(amzAll, prodsAll);
@@ -283,16 +321,16 @@ app.get("/api/metrics/lucros", async (req, res) => {
 });
 
 // Gráficos simples: receitas x despesas por mês
-app.get("/api/metrics/series", async (req, res) => {
-  // >>> Garantir string 'YYYY-MM-DD' para não vir Date do driver
+app.get("/api/metrics/series", async (_req, res) => {
   const amz = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM amazon_receitas`);
   const gastos = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM gastos`);
   const invest = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM investimentos`);
-  // compras por mês (a partir de produtos)
-  const prods = await all(db, `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`);
+  const prods = await all(
+    db,
+    `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`
+  );
 
-  const toMonth = (d) => (d ? d.slice(0,7) : "");
-
+  const toMonth = (d) => (d ? d.slice(0, 7) : "");
   const sumByMonth = (rows) => {
     const m = {};
     for (const r of rows) {
@@ -313,31 +351,18 @@ app.get("/api/metrics/series", async (req, res) => {
     comprasM[k] = (comprasM[k] || 0) + total;
   }
 
-  const meses = Array.from(new Set([
-    ...Object.keys(receitasM),
-    ...Object.keys(gastosM),
-    ...Object.keys(investM),
-    ...Object.keys(comprasM)
-  ])).filter(Boolean).sort();
+  const meses = Array.from(new Set([...Object.keys(receitasM), ...Object.keys(gastosM), ...Object.keys(investM), ...Object.keys(comprasM)])).filter(Boolean).sort();
 
-  const series = meses.map(m => {
+  const series = meses.map((m) => {
     const despt = (gastosM[m] || 0) + (investM[m] || 0) + (comprasM[m] || 0);
-    return {
-      mes: m,
-      receitas_amz: receitasM[m] || 0,
-      despesas_totais: despt,
-      resultado: (receitasM[m] || 0) - despt
-    };
+    return { mes: m, receitas_amz: receitasM[m] || 0, despesas_totais: despt, resultado: (receitasM[m] || 0) - despt };
   });
 
   res.json(series);
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log("API rodando na porta " + PORT));
-
 // ===== (opcional) teste SP-API =====
-app.get("/api/spapi/test", async (req, res) => {
+app.get("/api/spapi/test", async (_req, res) => {
   try {
     const creds = {
       refresh_token: process.env.SPAPI_REFRESH_TOKEN,
@@ -345,9 +370,8 @@ app.get("/api/spapi/test", async (req, res) => {
       lwa_client_secret: process.env.LWA_CLIENT_SECRET,
       aws_access_key_id: process.env.AWS_ACCESS_KEY_ID,
       aws_secret_access_key: process.env.AWS_SECRET_ACCESS_KEY,
-      role_arn: process.env.AWS_ROLE_ARN // se você usar assumeRole; caso não, remova
+      role_arn: process.env.AWS_ROLE_ARN,
     };
-    // lazy import para não quebrar caso pacote não esteja instalado
     const { Sellers, Marketplaces } = await import("amazon-sp-api");
     const sellers = new Sellers({ marketplace: Marketplaces.US, credentials: creds });
     const r = await sellers.getMarketplaceParticipations();
@@ -356,3 +380,6 @@ app.get("/api/spapi/test", async (req, res) => {
     res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
 });
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("API rodando na porta " + PORT));

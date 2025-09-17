@@ -4,9 +4,7 @@
   "private": true,
   "type": "module",
   "main": "server.js",
-  "engines": {
-    "node": "18.x"
-  },
+  "engines": { "node": "18.x" },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
