@@ -223,7 +223,7 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
   res.json(out);
 });
 
-// Amazon saldos e settlements (para futuros cards)
+// Amazon saldos (card)
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
   const row = await get(
     db,
@@ -332,7 +332,7 @@ app.get("/api/metrics/lucros", async (req, res) => {
   const grossProfitUnit = (p) => {
     const sold_for = money(p.sold_for);
     const amz = money(p.amazon_fees);
-    const prep = money(p.prep);
+    the prep is money(p.prep);
     const p2b = priceToBuyEff(p);
     return sold_for - amz - prep - p2b;
   };
@@ -355,23 +355,18 @@ app.get("/api/metrics/lucros", async (req, res) => {
 
 // --------- SÉRIE MENSAL: receitas x despesas x resultado ---------
 app.get("/api/metrics/series", async (_req, res) => {
-  // 1) Buscamos as linhas já como string YYYY-MM-DD para evitar Date
   const amz = await all(
     db,
-    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
-     FROM amazon_receitas`
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM amazon_receitas`
   );
   const gastos = await all(
     db,
-    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
-     FROM gastos`
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM gastos`
   );
   const invest = await all(
     db,
-    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd
-     FROM investimentos`
+    `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM investimentos`
   );
-  // compras (a partir dos produtos): usamos COALESCE(data_amz, data_add)
   const prods = await all(
     db,
     `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add,
@@ -379,8 +374,7 @@ app.get("/api/metrics/series", async (_req, res) => {
      FROM produtos`
   );
 
-  const toMonth = (d) => (d ? String(d).slice(0, 7) : ""); // YYYY-MM
-
+  const toMonth = (d) => (d ? String(d).slice(0, 7) : "");
   const sumByMonthSimple = (rows) => {
     const m = {};
     for (const r of rows) {
@@ -390,13 +384,10 @@ app.get("/api/metrics/series", async (_req, res) => {
     return m;
   };
 
-  // receitas (Amazon) por mês
   const receitasM = sumByMonthSimple(amz);
-  // gastos/ investimentos por mês
   const gastosM = sumByMonthSimple(gastos);
   const investM = sumByMonthSimple(invest);
 
-  // compras por mês (deriva dos produtos)
   const comprasM = {};
   for (const p of prods) {
     const k = toMonth(p.data_add);
@@ -406,7 +397,6 @@ app.get("/api/metrics/series", async (_req, res) => {
     comprasM[k] = (comprasM[k] || 0) + total;
   }
 
-  // meses presentes em qualquer série
   const meses = Array.from(
     new Set([
       ...Object.keys(receitasM),
@@ -418,7 +408,6 @@ app.get("/api/metrics/series", async (_req, res) => {
     .filter(Boolean)
     .sort();
 
-  // monta a série final
   const out = meses.map((m) => {
     const despesasTotais =
       (gastosM[m] || 0) + (investM[m] || 0) + (comprasM[m] || 0);
@@ -431,6 +420,55 @@ app.get("/api/metrics/series", async (_req, res) => {
   });
 
   res.json(out);
+});
+
+// --------- NOVO: Top/Bottom produtos por vendas (para os gráficos) ---------
+app.get("/api/metrics/products/sales", async (req, res) => {
+  let {
+    scope = "month",     // "month" | "year"
+    order = "desc",      // "desc" | "asc"
+    limit = "10",
+    year,
+    month,
+  } = req.query;
+
+  // defaults
+  const now = new Date();
+  year  = String(year  ?? now.getFullYear());
+  month = String(month ?? now.getMonth() + 1).padStart(2, "0");
+
+  let where = "";
+  let params = [];
+  if (scope === "year") {
+    where = `WHERE to_char(ar.data::date,'YYYY') = ?`;
+    params = [year];
+  } else {
+    // month (YYYY-MM)
+    where = `WHERE to_char(ar.data::date,'YYYY-MM') = ?`;
+    params = [`${year}-${month}`];
+  }
+
+  const ord = String(order).toLowerCase() === "asc" ? "ASC" : "DESC";
+  const lim = Number(limit) > 0 ? Number(limit) : 10;
+
+  const rows = await all(
+    db,
+    `
+    SELECT
+      COALESCE(p.sku, ar.sku, '(sem SKU)')  AS sku,
+      COALESCE(p.nome, ar.produto, '(sem nome)') AS nome,
+      SUM(COALESCE(ar.quantidade,0))::int  AS qty
+    FROM amazon_receitas ar
+    LEFT JOIN produtos p ON p.id = ar.produto_id
+    ${where}
+    GROUP BY 1,2
+    ORDER BY qty ${ord}
+    LIMIT ${lim}
+    `,
+    params
+  );
+
+  res.json(rows);
 });
 
 // ===== (opcional) teste SP-API =====
