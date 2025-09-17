@@ -14,6 +14,40 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+// ====== Anti-cache para API ======
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+  }
+  next();
+});
+
+// ====== Servir SPA com headers de cache corretos ======
+import express from "express";
+import path from "path";
+
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
+
+// 1) Assets com cache longo (immutable)
+app.use((req, res, next) => {
+  if (/\.(?:js|css|png|jpg|jpeg|svg|webp|ico|woff2?)$/i.test(req.path)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  }
+  next();
+});
+app.use(express.static(PUBLIC_DIR, { index: false, etag: true, lastModified: true }));
+
+// 2) HTML SEM cache (SPA fallback)
+app.get(["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos", "/#/.*"], (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
+
 // >>> Postgres: não há mais DB_PATH; apenas abre o pool:
 const db = openDb();
 

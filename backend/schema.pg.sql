@@ -1,0 +1,88 @@
+CREATE TABLE IF NOT EXISTS gastos (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  categoria TEXT NOT NULL,
+  descricao TEXT,
+  valor_brl NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT
+);
+
+CREATE TABLE IF NOT EXISTS investimentos (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  valor_brl NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT
+);
+
+CREATE TABLE IF NOT EXISTS receitas (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  origem TEXT NOT NULL DEFAULT 'FBA',
+  descricao TEXT,
+  valor_brl NUMERIC(12,2) NOT NULL DEFAULT 0,
+  valor_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  metodo TEXT,
+  conta TEXT,
+  quem TEXT,
+  bruto NUMERIC(12,2) NOT NULL DEFAULT 0,
+  cogs NUMERIC(12,2) NOT NULL DEFAULT 0,
+  taxas_amz NUMERIC(12,2) NOT NULL DEFAULT 0,
+  ads NUMERIC(12,2) NOT NULL DEFAULT 0,
+  frete NUMERIC(12,2) NOT NULL DEFAULT 0,
+  descontos NUMERIC(12,2) NOT NULL DEFAULT 0,
+  lucro NUMERIC(12,2) NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS produtos (
+  id SERIAL PRIMARY KEY,
+  data_add DATE NOT NULL,
+  nome TEXT NOT NULL,
+  sku TEXT,
+  upc TEXT,
+  asin TEXT,
+  estoque INTEGER NOT NULL DEFAULT 0,
+  custo_base NUMERIC(12,2) NOT NULL DEFAULT 0,
+  freight NUMERIC(12,2) NOT NULL DEFAULT 0,
+  tax NUMERIC(12,2) NOT NULL DEFAULT 0,
+  quantidade INTEGER NOT NULL DEFAULT 0,
+  prep NUMERIC(12,2) NOT NULL DEFAULT 2,
+  sold_for NUMERIC(12,2) NOT NULL DEFAULT 0,
+  amazon_fees NUMERIC(12,2) NOT NULL DEFAULT 0,
+  link_amazon TEXT,
+  link_fornecedor TEXT,
+  data_amz DATE
+);
+
+CREATE TABLE IF NOT EXISTS amazon_receitas (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  produto_id INTEGER REFERENCES produtos(id) ON DELETE SET NULL,
+  quantidade INTEGER NOT NULL DEFAULT 0,
+  valor_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  quem TEXT,
+  obs TEXT,
+  produto TEXT,
+  sku TEXT
+);
+
+CREATE TABLE IF NOT EXISTS amazon_saldos (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  disponivel NUMERIC(12,2) NOT NULL DEFAULT 0,
+  pendente NUMERIC(12,2) NOT NULL DEFAULT 0,
+  moeda TEXT NOT NULL DEFAULT 'USD'
+);
+
+CREATE TABLE IF NOT EXISTS amazon_settlements (
+  id SERIAL PRIMARY KEY,
+  data DATE NOT NULL,
+  amount_usd NUMERIC(12,2) NOT NULL DEFAULT 0,
+  group_id TEXT,
+  "desc" TEXT
+);
