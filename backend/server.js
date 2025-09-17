@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // *** ATENÇÃO: seu front está em frontend/public ***
-const PUBLIC_DIR = path.join(__dirname, "..", "frontend", "public");
+const PUBLIC_DIR = path.join(__dirname, "public");
 
 const app = express();
 app.use(express.json());
