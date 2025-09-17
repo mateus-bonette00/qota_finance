@@ -67,8 +67,25 @@ app.get(
 const db = openDb();
 
 // ---------- utils ----------
-const money  = (x) => (Number.isFinite(+x) ? +x : 0);
-const yyyymm = (d) => (d ? String(d) : "").slice(0, 7); // YYYY-MM seguro para Date/string
+const money = (x) => (Number.isFinite(+x) ? +x : 0);
+
+// YYYY-MM robusto para string ou Date
+function yyyymm(d) {
+  if (!d) return "";
+  // se já veio como string YYYY-MM-... ou YYYY-MM
+  if (typeof d === "string") {
+    const m = d.match(/^(\d{4}-\d{2})/);
+    if (m) return m[1];
+  }
+  // tenta converter para Date
+  const dt = new Date(d);
+  if (!isNaN(dt)) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+  return "";
+}
 
 // Filtro por mês usando to_char
 function monthFilterClause(tableDateCol = "data") {
@@ -332,25 +349,24 @@ app.get("/api/metrics/lucros", async (req, res) => {
   const grossProfitUnit = (p) => {
     const sold_for = money(p.sold_for);
     const amz = money(p.amazon_fees);
-    the prep is money(p.prep);
+    const prep = money(p.prep);
     const p2b = priceToBuyEff(p);
     return sold_for - amz - prep - p2b;
   };
-  async function sumProfit(receipts, productsMap) {
-    let total = 0;
-    for (const r of receipts) {
-      const prod = productsMap.get(r.produto_id);
-      if (!prod) continue;
-      const gp = grossProfitUnit(prod);
-      total += gp * money(r.quantidade);
-    }
-    return total;
+  let total = 0;
+  for (const r of periodReceipts) {
+    const prod = byId.get(r.produto_id);
+    if (!prod) continue;
+    total += grossProfitUnit(prod) * money(r.quantidade);
+  }
+  let totalAll = 0;
+  for (const r of amzAll) {
+    const prod = byId.get(r.produto_id);
+    if (!prod) continue;
+    totalAll += grossProfitUnit(prod) * money(r.quantidade);
   }
 
-  const lucroPeriodo = await sumProfit(periodReceipts, byId);
-  const lucroTotal = await sumProfit(amzAll, byId);
-
-  res.json({ lucroPeriodo, lucroTotal });
+  res.json({ lucroPeriodo: total, lucroTotal: totalAll });
 });
 
 // --------- SÉRIE MENSAL: receitas x despesas x resultado ---------
@@ -374,7 +390,7 @@ app.get("/api/metrics/series", async (_req, res) => {
      FROM produtos`
   );
 
-  const toMonth = (d) => (d ? String(d).slice(0, 7) : "");
+  const toMonth = (d) => yyyymm(d);
   const sumByMonthSimple = (rows) => {
     const m = {};
     for (const r of rows) {
@@ -432,7 +448,6 @@ app.get("/api/metrics/products/sales", async (req, res) => {
     month,
   } = req.query;
 
-  // defaults
   const now = new Date();
   year  = String(year  ?? now.getFullYear());
   month = String(month ?? now.getMonth() + 1).padStart(2, "0");
@@ -443,7 +458,6 @@ app.get("/api/metrics/products/sales", async (req, res) => {
     where = `WHERE to_char(ar.data::date,'YYYY') = ?`;
     params = [year];
   } else {
-    // month (YYYY-MM)
     where = `WHERE to_char(ar.data::date,'YYYY-MM') = ?`;
     params = [`${year}-${month}`];
   }
