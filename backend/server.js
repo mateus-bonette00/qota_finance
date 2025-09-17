@@ -6,11 +6,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { openDb, all, get, run } from "./db.pg.js";
 
-// ---------- paths auxiliares ----------
+// --- paths auxiliares ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// SPA está em backend/public
+// pasta pública (está dentro de backend/public)
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const app = express();
@@ -35,10 +35,7 @@ app.use(
 // ---------- Anti-cache somente para a API ----------
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
-    res.setHeader(
-      "Cache-Control",
-      "no-store, no-cache, must-revalidate, proxy-revalidate"
-    );
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     res.setHeader("Surrogate-Control", "no-store");
@@ -55,9 +52,8 @@ app.use((req, res, next) => {
 });
 app.use(express.static(PUBLIC_DIR, { index: false, etag: true, lastModified: true }));
 
-// Rotas da SPA (fallback para index.html)
 app.get(
-  ["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos"],
+  ["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos", "/#/.*"],
   (_req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(PUBLIC_DIR, "index.html"));
@@ -69,7 +65,22 @@ const db = openDb();
 
 // ---------- utils ----------
 const money = (x) => (Number.isFinite(+x) ? +x : 0);
-const yyyymm = (d) => (d || "").slice(0, 7);
+
+// normaliza valor para string "YYYY-MM-DD"
+function asDateString(d) {
+  if (!d) return "";
+  if (typeof d === "string") return d;
+  const t = d instanceof Date ? d : new Date(d);
+  if (!isNaN(t)) {
+    const y = t.getUTCFullYear();
+    const m = String(t.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(t.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return String(d);
+}
+const yyyymm = (d) => asDateString(d).slice(0, 7); // "YYYY-MM"
+
 const priceToBuyEff = (p) => {
   const base = money(p.custo_base);
   const tax = money(p.tax);
@@ -108,7 +119,8 @@ app.get("/api/gastos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT * FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
+    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, categoria, descricao, valor_brl, valor_usd, metodo, conta, quem
+     FROM gastos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -139,7 +151,8 @@ app.get("/api/investimentos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT * FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
+    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, valor_brl, valor_usd, metodo, conta, quem
+     FROM investimentos ${month ? monthFilterClause("data") : ""} ORDER BY (data)::date DESC, id DESC`,
     month ? [month] : []
   );
   res.json(rows);
@@ -168,7 +181,9 @@ app.get("/api/produtos", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id, COALESCE(data_amz, data_add) as data_add, nome, sku, upc, asin, estoque,
+    `SELECT id,
+            to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') AS data_add,
+            nome, sku, upc, asin, estoque,
             custo_base, freight, tax, quantidade, prep, sold_for, amazon_fees,
             link_amazon, link_fornecedor
      FROM produtos
@@ -213,7 +228,9 @@ app.get("/api/amazon_receitas", async (req, res) => {
   const { month } = req.query;
   const rows = await all(
     db,
-    `SELECT id, data, produto_id, quantidade, valor_usd, quem, obs, sku, produto
+    `SELECT id,
+            to_char(data::date,'YYYY-MM-DD') AS data,
+            produto_id, quantidade, valor_usd, quem, obs, sku, produto
      FROM amazon_receitas
      ${month ? monthFilterClause("data") : ""}
      ORDER BY (data)::date DESC, id DESC`,
@@ -249,9 +266,16 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
   res.json(out);
 });
 
-// Amazon saldos (placeholder simp.)
+// Amazon saldos e settlements (para futuros cards)
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
-  const row = await get(db, `SELECT * FROM amazon_saldos ORDER BY (data)::date DESC, id DESC LIMIT 1`);
+  const row = await get(
+    db,
+    `SELECT id, disponivel, pendente, moeda,
+            to_char(data::date,'YYYY-MM-DD') AS data
+     FROM amazon_saldos
+     ORDER BY (data)::date DESC, id DESC
+     LIMIT 1`
+  );
   res.json(row || { disponivel: 0, pendente: 0, moeda: "USD" });
 });
 
@@ -259,11 +283,31 @@ app.get("/api/amazon_saldos/latest", async (_req, res) => {
 app.get("/api/metrics/resumo", async (req, res) => {
   const { month } = req.query;
 
-  const gastos = await all(db, `SELECT valor_brl, valor_usd FROM gastos ${month ? monthFilterClause("data") : ""}`, month ? [month] : []);
-  const investimentos = await all(db, `SELECT valor_brl, valor_usd FROM investimentos ${month ? monthFilterClause("data") : ""}`, month ? [month] : []);
-  const receitas = await all(db, `SELECT valor_brl, valor_usd FROM receitas ${month ? monthFilterClause("data") : ""}`, month ? [month] : []);
-  const amz = await all(db, `SELECT valor_usd FROM amazon_receitas ${month ? monthFilterClause("data") : ""}`, month ? [month] : []);
-  const prodsMes = await all(db, `SELECT * FROM produtos ${month ? monthFilterClause("COALESCE(data_amz,data_add)") : ""}`, month ? [month] : []);
+  const gastos = await all(
+    db,
+    `SELECT valor_brl, valor_usd FROM gastos ${month ? monthFilterClause("data") : ""}`,
+    month ? [month] : []
+  );
+  const investimentos = await all(
+    db,
+    `SELECT valor_brl, valor_usd FROM investimentos ${month ? monthFilterClause("data") : ""}`,
+    month ? [month] : []
+  );
+  const receitas = await all(
+    db,
+    `SELECT valor_brl, valor_usd FROM receitas ${month ? monthFilterClause("data") : ""}`,
+    month ? [month] : []
+  );
+  const amz = await all(
+    db,
+    `SELECT valor_usd FROM amazon_receitas ${month ? monthFilterClause("data") : ""}`,
+    month ? [month] : []
+  );
+  const prodsMes = await all(
+    db,
+    `SELECT * FROM produtos ${month ? monthFilterClause("COALESCE(data_amz,data_add)") : ""}`,
+    month ? [month] : []
+  );
 
   const comprasUSD = prodsMes.reduce((acc, p) => {
     const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
@@ -312,103 +356,69 @@ app.get("/api/metrics/totais", async (_req, res) => {
 
 app.get("/api/metrics/lucros", async (req, res) => {
   const { month } = req.query;
-  const amzAll = await all(db, `SELECT id, data, produto_id, quantidade, valor_usd, sku, produto FROM amazon_receitas`);
+
+  const amzAll = await all(
+    db,
+    `SELECT id, to_char(data::date,'YYYY-MM-DD') AS data, produto_id, quantidade, valor_usd, sku, produto
+     FROM amazon_receitas`
+  );
   const prodsAll = await all(db, `SELECT * FROM produtos`);
+
   const periodReceipts = month ? amzAll.filter((r) => yyyymm(r.data) === month) : amzAll;
+
   const lucroPeriodo = await sumProfit(periodReceipts, prodsAll);
   const lucroTotal = await sumProfit(amzAll, prodsAll);
+
   res.json({ lucroPeriodo, lucroTotal });
 });
 
-// Séries por mês (receita x despesa)
-app.get("/api/metrics/series", async (_req, res) => {
-  const amz = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM amazon_receitas`);
-  const gastos = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM gastos`);
-  const invest = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM investimentos`);
-  const prods = await all(
+// --------- NOVO: vendas por produto (para os gráficos Top/Bottom) ---------
+app.get("/api/metrics/products/sales", async (req, res) => {
+  // scope: "month" | "year"
+  // order: "desc" | "asc"
+  // limit: número (default 10)
+  // year/month (para escopo month)
+  const scope = (req.query.scope || "month").toLowerCase();
+  const order = (req.query.order || "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+  const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 50));
+
+  let where = "";
+  const params = [];
+
+  if (scope === "year") {
+    const year = String(req.query.year || new Date().getUTCFullYear());
+    where = "WHERE to_char(data::date,'YYYY') = ?";
+    params.push(year);
+  } else {
+    // month
+    const y = String(req.query.year || new Date().getUTCFullYear());
+    const m = String(req.query.month || new Date().getUTCMonth() + 1).padStart(2, "0");
+    where = "WHERE to_char(data::date,'YYYY-MM') = ?";
+    params.push(`${y}-${m}`);
+  }
+
+  const rows = await all(
     db,
-    `SELECT to_char(COALESCE(data_amz, data_add)::date,'YYYY-MM-DD') as data_add, custo_base, prep, amazon_fees, quantidade, freight, tax FROM produtos`
+    `
+    SELECT
+      NULLIF(TRIM(COALESCE(sku,'')), '') AS sku,
+      SUM(COALESCE(quantidade,0))::int AS qty
+    FROM amazon_receitas
+    ${where}
+    GROUP BY sku
+    ORDER BY qty ${order}
+    LIMIT ${limit}
+    `,
+    params
   );
 
-  const toMonth = (d) => (d ? d.slice(0, 7) : "");
-  const sumByMonth = (rows) => {
-    const m = {};
-    for (const r of rows) {
-      const k = toMonth(r.data);
-      m[k] = (m[k] || 0) + money(r.valor_usd);
-    }
-    return m;
-  };
-  const receitasM = sumByMonth(amz);
-  const gastosM = sumByMonth(gastos);
-  const investM = sumByMonth(invest);
+  // normaliza sku vazio
+  const out = rows.map((r) => ({
+    sku: r.sku || "(sem SKU)",
+    qty: Number(r.qty || 0),
+  }));
 
-  const comprasM = {};
-  for (const p of prods) {
-    const k = toMonth(p.data_add);
-    const unit = (money(p.custo_base) + money(p.prep) + money(p.amazon_fees)) * money(p.quantidade);
-    const total = unit + money(p.freight) + money(p.tax);
-    comprasM[k] = (comprasM[k] || 0) + total;
-  }
-
-  const meses = Array.from(
-    new Set([...Object.keys(receitasM), ...Object.keys(gastosM), ...Object.keys(investM), ...Object.keys(comprasM)])
-  )
-    .filter(Boolean)
-    .sort();
-
-  const series = meses.map((m) => {
-    const despt = (gastosM[m] || 0) + (investM[m] || 0) + (comprasM[m] || 0);
-    return { mes: m, receitas_amz: receitasM[m] || 0, despesas_totais: despt, resultado: (receitasM[m] || 0) - despt };
-  });
-
-  res.json(series);
-});
-
-// ======= NOVO: vendas por produto para os gráficos =======
-// /api/metrics/products/sales?scope=month|year&order=desc|asc&limit=10&year=2025&month=09
-app.get("/api/metrics/products/sales", async (req, res) => {
-  try {
-    const scope = (req.query.scope || "month").toLowerCase();   // 'month' ou 'year'
-    const order = (req.query.order || "desc").toLowerCase();    // 'asc' ou 'desc'
-    const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 100));
-    const year  = req.query.year ? String(req.query.year) : null;
-    const month = req.query.month ? String(req.query.month).padStart(2, "0") : null;
-
-    const params = [];
-    let where = "";
-
-    if (scope === "month" && year && month) {
-      where = "WHERE to_char(ar.data::date,'YYYY-MM') = ?";
-      params.push(`${year}-${month}`);
-    } else if (scope === "year" && year) {
-      where = "WHERE to_char(ar.data::date,'YYYY') = ?";
-      params.push(year);
-    }
-
-    const rows = await all(
-      db,
-      `
-      SELECT
-        COALESCE(p.id, ar.produto_id)        AS produto_id,
-        COALESCE(p.nome, ar.produto, ar.sku) AS nome,
-        COALESCE(p.sku,  ar.sku)             AS sku,
-        SUM(ar.quantidade)                   AS qty
-      FROM amazon_receitas ar
-      LEFT JOIN produtos p ON p.id = ar.produto_id
-      ${where}
-      GROUP BY 1,2,3
-      ORDER BY qty ${order === "asc" ? "ASC" : "DESC"}, nome ASC
-      LIMIT ${limit}
-      `,
-      params
-    );
-
-    res.json(rows);
-  } catch (err) {
-    console.error("products/sales error:", err);
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
-  }
+  res.json(out);
 });
 
 // ===== (opcional) teste SP-API =====
@@ -431,6 +441,5 @@ app.get("/api/spapi/test", async (_req, res) => {
   }
 });
 
-// ---------- start ----------
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log("API rodando na porta " + PORT));
