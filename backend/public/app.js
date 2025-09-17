@@ -1,40 +1,25 @@
-// =======================================
-// Qota Finance - app.js (SPA com hash routes)
-// =======================================
+// ================================
+// Qota Finance - SPA (hash routes)
+// ================================
 
-// ======= Config =======
+// -------- Config --------
 const API = "/api";
-// ======= Helpers DOM / formato =======
-const $ = (sel, el = document) => el.querySelector(sel);
+
+// -------- Helpers DOM / formato --------
+const $  = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
 const fmtUSD = (x) =>
-  `$ ${Number(x || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  `$ ${Number(x || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const fmtBRL = (x) =>
-  `R$ ${Number(x || 0).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  `R$ ${Number(x || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const signCls = (x) => (Number(x) > 0 ? "pos" : Number(x) < 0 ? "neg" : "");
 
 const MESES_PT = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
+  "janeiro","fevereiro","março","abril","maio","junho",
+  "julho","agosto","setembro","outubro","novembro","dezembro"
 ];
 
 const monthLabel = (m) => {
@@ -44,7 +29,7 @@ const monthLabel = (m) => {
   return `${MESES_PT[idx]} (${y})`;
 };
 
-// popula selects de mês/ano do header
+// popula selects do header
 function initMonthYear() {
   const selMes = $("#selMes");
   const selAno = $("#selAno");
@@ -54,8 +39,7 @@ function initMonthYear() {
   for (let i = 1; i <= 12; i++) {
     const opt = document.createElement("option");
     opt.value = i;
-    const label =
-      MESES_PT[i - 1].charAt(0).toUpperCase() + MESES_PT[i - 1].slice(1);
+    const label = MESES_PT[i - 1].charAt(0).toUpperCase() + MESES_PT[i - 1].slice(1);
     opt.textContent = label;
     selMes.appendChild(opt);
   }
@@ -64,24 +48,11 @@ function initMonthYear() {
   for (let y = yNow - 4; y <= yNow + 1; y++) years.push(y);
   selAno.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join("");
 
-  // default atual
   selMes.value = new Date().getMonth() + 1;
   selAno.value = yNow;
 
   selMes.addEventListener("change", refreshRoute);
   selAno.addEventListener("change", refreshRoute);
-}
-
-
-// total gasto em um produto (compra)
-// = (qty * (custo_base + prep)) + freight
-function produtoTotalUSD(p) {
-  const qty       = Number(p.quantidade || 0);
-  const unit      = Number(p.custo_base || 0);   // valor unitário de compra
-  const prep      = Number(p.prep || 0);         // prep por unidade
-  const freight   = Number(p.freight || 0);      // frete do lote
-
-  return (qty * (unit + prep)) + freight;
 }
 
 function currentMonthStr() {
@@ -91,19 +62,13 @@ function currentMonthStr() {
 }
 
 function activateTab() {
-  $$(".tabs a").forEach((a) =>
-    a.classList.toggle("active", a.getAttribute("href") === location.hash)
-  );
-  // garante scroll to top ao trocar de rota
+  $$(".tabs a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === location.hash));
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 // fetch wrapper
 async function api(path, opts = {}) {
-  const r = await fetch(API + path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+  const r = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
   if (!r.ok) {
     const t = await r.text().catch(() => "");
     throw new Error(t || `HTTP ${r.status}`);
@@ -111,20 +76,16 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
-// ================= Ícones / componentes dos KPIs =================
+// ========= Ícones / componentes =========
 const ICONS = {
-  up: "assets/triangle-up.svg",
+  up:   "assets/triangle-up.svg",
   down: "assets/triangle-down.svg",
   coin: "assets/coins.svg",
-  amz: "assets/amazon.svg",
+  amz:  "assets/amazon.svg",
 };
 
-// Monta um card KPI com ícone (verde/ vermelho / azul)
 function kpiCardHTML(kind, label, usd, brl) {
-  const icon =
-    kind === "receita" ? ICONS.up : kind === "despesa" ? ICONS.down : ICONS.coin;
-
-  // aplica classe apenas no card de resultado
+  const icon = kind === "receita" ? ICONS.up : kind === "despesa" ? ICONS.down : ICONS.coin;
   const usdCls = kind === "result" ? signCls(usd) : "";
   const brlCls = kind === "result" ? signCls(brl) : "";
 
@@ -139,29 +100,22 @@ function kpiCardHTML(kind, label, usd, brl) {
     </div>`;
 }
 
-
-// Linha com 3 KPIs
 function kpiRow3HTML(items) {
-  // items: [{kind,label,usd,brl}, ...]
-  return `<div class="kpi-row3">${items
-    .map((it) => kpiCardHTML(it.kind, it.label, it.usd, it.brl))
-    .join("")}</div>`;
+  return `<div class="kpi-row3">${items.map((it) => kpiCardHTML(it.kind, it.label, it.usd, it.brl)).join("")}</div>`;
 }
 
-// ====================== Views ======================
+// ======= Views =======
 
 // ------- Principal -------
 async function renderPrincipal(root) {
   const mes = currentMonthStr();
 
-  // dados
   const saldo = await api("/amazon_saldos/latest");
-  const kMes = await api(`/metrics/resumo?month=${mes}`);
-  const kTot = await api(`/metrics/totais`);
+  const kMes  = await api(`/metrics/resumo?month=${mes}`);
+  const kTot  = await api(`/metrics/totais`);
   const { lucroPeriodo, lucroTotal } = await api(`/metrics/lucros?month=${mes}`);
 
   root.innerHTML = `
-    <!-- Card Amazon laranja -->
     <section class="amz-card">
       <div class="amz-ico"></div>
       <div>
@@ -181,7 +135,6 @@ async function renderPrincipal(root) {
     <hr class="hr-soft"/>
 
     <h3 class="h3-center" style="margin-top:22px">Lucros</h3>
-    
     <div class="cards-lucros">
       <section class="lucro-card" style="margin-top:10px">
         <div class="ico"><img src="${ICONS.up}" alt=""></div>
@@ -190,8 +143,6 @@ async function renderPrincipal(root) {
           <div class="value">${fmtUSD(lucroPeriodo)}</div>
         </div>
       </section>
-   
-
       <section class="lucro-card" style="margin-top:14px">
         <div class="ico"><img src="${ICONS.up}" alt=""></div>
         <div>
@@ -202,59 +153,29 @@ async function renderPrincipal(root) {
     </div>
   `;
 
-  // KPIs do mês
   $("#kpimes").innerHTML = kpiRow3HTML([
     { kind: "receita", label: "Receitas (mês)", usd: kMes.recUSD, brl: kMes.recBRL },
-    {
-      kind: "despesa",
-      label: "Despesas (mês)",
-      usd: kMes.despUSD,
-      brl: kMes.despBRL,
-    },
-    {
-      kind: "result",
-      label: "Resultado (mês)",
-      usd: kMes.recUSD - kMes.despUSD,
-      brl: kMes.recBRL - kMes.despBRL,
-    },
+    { kind: "despesa", label: "Despesas (mês)", usd: kMes.despUSD, brl: kMes.despBRL },
+    { kind: "result",  label: "Resultado (mês)", usd: kMes.recUSD - kMes.despUSD, brl: kMes.recBRL - kMes.despBRL },
   ]);
 
-  // KPIs totais
   $("#kpitotal").innerHTML = kpiRow3HTML([
-    {
-      kind: "receita",
-      label: "Receitas (total — todos os meses)",
-      usd: kTot.recUSD,
-      brl: kTot.recBRL,
-    },
-    {
-      kind: "despesa",
-      label: "Despesas (total — todos os meses)",
-      usd: kTot.despUSD,
-      brl: kTot.despBRL,
-    },
-    {
-      kind: "result",
-      label: "Resultado (total — todos os meses)",
-      usd: kTot.recUSD - kTot.despUSD,
-      brl: kTot.recBRL - kTot.despBRL,
-    },
+    { kind: "receita", label: "Receitas (total)", usd: kTot.recUSD, brl: kTot.recBRL },
+    { kind: "despesa", label: "Despesas (total)", usd: kTot.despUSD, brl: kTot.despBRL },
+    { kind: "result",  label: "Resultado (total)", usd: kTot.recUSD - kTot.despUSD, brl: kTot.recBRL - kTot.despBRL },
   ]);
 }
 
 // ------- Receitas (FBA) -------
 async function renderReceitas(root) {
   const mes = currentMonthStr();
-  // produtos para select
   const prods = await api(`/produtos?month=${mes}`);
 
   root.innerHTML = `
     <h2 class="h3-center">Produtos Vendidos (Receitas)</h2>
 
     <form id="formRec" class="panel form">
-      <label>Data do crédito
-        <input type="date" name="data" required />
-      </label>
+      <label>Data do crédito <input type="date" name="data" required /></label>
 
       <label>Produto vendido (SKU | UPC | Nome)
         <select name="produto_id" id="selProd"></select>
@@ -272,36 +193,22 @@ async function renderReceitas(root) {
         <select name="quem"><option>Bonette</option><option>Daniel</option></select>
       </label>
 
-      <label>Observação
-        <input type="text" name="obs" />
-      </label>
+      <label>Observação <input type="text" name="obs" /></label>
 
-      <div>
-        <button class="btn" type="submit">Adicionar recebimento (Amazon)</button>
-      </div>
+      <div><button class="btn" type="submit">Adicionar recebimento (Amazon)</button></div>
     </form>
 
     <div id="cardsRec" class="row"></div>
-
-    <div class="panel">
-      <table class="tbl" id="tblRec"></table>
-    </div>
+    <div class="panel"><table class="tbl" id="tblRec"></table></div>
   `;
 
-  // popular select com label (SKU | UPC | Nome)
+  // select de produtos
   const sel = $("#selProd");
-  sel.innerHTML = prods
-    .map((p) => {
-      const label = `${(p.sku || "").trim()} | ${(p.upc || "").trim()} | ${
-        p.nome
-      }`.replaceAll(" | | ", " | ");
-      return `<option value="${p.id}" data-sold="${p.sold_for || 0}" data-sku="${
-        p.sku || ""
-      }" data-nome="${p.nome || ""}">${label}</option>`;
-    })
-    .join("");
+  sel.innerHTML = prods.map((p) => {
+    const label = `${(p.sku || "").trim()} | ${(p.upc || "").trim()} | ${p.nome}`.replaceAll(" | | ", " | ");
+    return `<option value="${p.id}" data-sold="${p.sold_for || 0}" data-sku="${p.sku || ""}" data-nome="${p.nome || ""}">${label}</option>`;
+  }).join("");
 
-  // default sold_for quando troca produto
   const soldInput = $('input[name="valor_unidade"]', $("#formRec"));
   sel.addEventListener("change", () => {
     const opt = sel.selectedOptions[0];
@@ -319,22 +226,21 @@ async function renderReceitas(root) {
       data: fd.get("data"),
       produto_id,
       quantidade: Number(fd.get("quantidade")),
-      valor_usd:
-        Number(fd.get("valor_unidade")) * Number(fd.get("quantidade")),
+      valor_usd: Number(fd.get("valor_unidade")) * Number(fd.get("quantidade")),
       quem: fd.get("quem"),
       obs: fd.get("obs") || "",
       sku: opt.dataset.sku || "",
       produto: opt.dataset.nome || "",
     };
     await api("/amazon_receitas", { method: "POST", body: JSON.stringify(body) });
-    await renderReceitas(root); // recarrega
+    await renderReceitas(root);
   });
 
   // totais
   const all = await api("/amazon_receitas");
   const period = all.filter((r) => (r.data || "").slice(0, 7) === mes);
-  const totQty = period.reduce((s, r) => s + Number(r.quantidade || 0), 0);
-  const totVal = period.reduce((s, r) => s + Number(r.valor_usd || 0), 0);
+  const totQty    = period.reduce((s, r) => s + Number(r.quantidade || 0), 0);
+  const totVal    = period.reduce((s, r) => s + Number(r.valor_usd || 0), 0);
   const totQtyAll = all.reduce((s, r) => s + Number(r.quantidade || 0), 0);
   const totValAll = all.reduce((s, r) => s + Number(r.valor_usd || 0), 0);
 
@@ -350,24 +256,18 @@ async function renderReceitas(root) {
   `;
 
   // tabela
-  const rows = period;
-  const header = ["ID", "Data", "Produto", "SKU", "Qtd", "Valor (USD)", "Quem", "Ações"];
+  const header = ["ID","Data","Produto","SKU","Qtd","Valor (USD)","Quem","Ações"];
   const prodsMap = new Map(prods.map((p) => [p.id, p]));
   const html = [
     `<thead><tr>${header.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>`,
   ];
-  for (const r of rows) {
+  for (const r of period) {
     const p = prodsMap.get(r.produto_id) || {};
     const nome = r.produto || p.nome || "";
-    const sku = r.sku || p.sku || "";
+    const sku  = r.sku    || p.sku  || "";
     html.push(`<tr>
-      <td>${r.id}</td>
-      <td>${r.data}</td>
-      <td>${nome}</td>
-      <td>${sku}</td>
-      <td>${r.quantidade}</td>
-      <td>${fmtUSD(r.valor_usd)}</td>
-      <td>${r.quem || ""}</td>
+      <td>${r.id}</td><td>${r.data}</td><td>${nome}</td><td>${sku}</td>
+      <td>${r.quantidade}</td><td>${fmtUSD(r.valor_usd)}</td><td>${r.quem || ""}</td>
       <td><button class="btn secondary" data-del="${r.id}">Excluir</button></td>
     </tr>`);
   }
@@ -386,9 +286,6 @@ async function renderReceitas(root) {
 // ------- Gráficos -------
 async function renderGraficos(root) {
   const mes = currentMonthStr();
-  const now = new Date();
-  const year = String(now.getFullYear());
-  const month = String(now.getMonth() + 1).padStart(2, "0");
 
   root.innerHTML = `
     <h2 class="h3-center">Gráficos</h2>
@@ -427,22 +324,16 @@ async function renderGraficos(root) {
     </div>
   `;
 
-  // ======== Gráficos existentes ========
+  // séries mês a mês
   const series = await api("/metrics/series");
-  const meses = series.map((s) => s.mes);
-  const receitas = series.map((s) => s.receitas_amz);
-  const despesas = series.map((s) => s.despesas_totais);
+  const meses     = series.map((s) => s.mes);
+  const receitas  = series.map((s) => s.receitas_amz);
+  const despesas  = series.map((s) => s.despesas_totais);
   const resultado = series.map((s) => s.resultado);
 
   new Chart($("#line"), {
     type: "line",
-    data: {
-      labels: meses,
-      datasets: [
-        { label: "Receitas (Amazon)", data: receitas },
-        { label: "Despesas Totais", data: despesas },
-      ],
-    },
+    data: { labels: meses, datasets: [{ label: "Receitas (Amazon)", data: receitas }, { label: "Despesas Totais", data: despesas }] },
     options: { responsive: true }
   });
 
@@ -452,83 +343,60 @@ async function renderGraficos(root) {
     options: { responsive: true }
   });
 
-  // ======== Helpers dos novos gráficos ========
-  const fetchSales = (scope, order) =>
-    api(`/metrics/products/sales?scope=${scope}&order=${order}&limit=10&year=${year}&month=${month}`);
-// === estilo das barras (igual ao print) ===
-const BAR_STROKE = "#3498DB";                  // 100%
-const BAR_FILL   = "rgba(52, 152, 219, 0.32)"; // 32%
+  // Top/Bottom produtos (usa /metrics/products/sales)
+  const salesMonth = await api(`/metrics/products/sales?month=${mes}`);
 
-const makeHBar = (canvas, rows, title) => {
-  const labels = rows.map(r => r.sku || "(sem SKU)");
-  const data   = rows.map(r => r.qty || 0);
+  // Helpers de gráfico horizontal
+  const BAR_STROKE = "#3498DB";
+  const BAR_FILL   = "rgba(52, 152, 219, 0.32)";
 
-  new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        label: title,
-        data,
-        backgroundColor: BAR_FILL,      // fill 32%
-        borderColor: BAR_STROKE,        // stroke 100%
-        borderWidth: 1,
-        borderSkipped: false,
-        borderAlign: "inner",           // borda "por dentro"
-        barThickness: 22,               // opcional: ajusta altura da barra
-        hoverBackgroundColor: BAR_FILL,
-        hoverBorderColor: BAR_STROKE
-      }]
-    },
-    options: {
-      indexAxis: "y",
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true },
-        datalabels: {
-          anchor: "end",
-          align: "right",
-          formatter: (v) => v,          // mostra QUANTIDADE (não %)
-          clamp: true,
-          color: BAR_STROKE,            // número na cor da borda
-          font: { weight: 600 }
-        }
-      },
-      scales: {
-        x: {
-          beginAtZero: true,
-          ticks: { precision: 0 }       // inteiros
+  const makeHBar = (canvas, rows, title) => {
+    const labels = rows.map((r) => r.sku || r.nome || "(sem SKU)");
+    const data   = rows.map((r) => Number(r.quantidade || 0));
+
+    new Chart(canvas, {
+      type: "bar",
+      data: { labels, datasets: [{ label: title, data, backgroundColor: BAR_FILL, borderColor: BAR_STROKE, borderWidth: 1, borderSkipped: false, borderAlign: "inner", barThickness: 22, hoverBackgroundColor: BAR_FILL, hoverBorderColor: BAR_STROKE }] },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true },
+          datalabels: {
+            anchor: "end",
+            align: "right",
+            formatter: (v) => v,
+            clamp: true,
+            color: BAR_STROKE,
+            font: { weight: 600 }
+          }
         },
-        y: {
-          ticks: { autoSkip: false }    // tenta exibir todos os ASINs
-        }
-      }
-    },
-    plugins: [ChartDataLabels]
-  });
-};
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { ticks: { autoSkip: false } } }
+      },
+      plugins: [ChartDataLabels]
+    });
+  };
 
-  // ======== Busca dos dados e render ========
-  const [topM, topY, botM, botY] = await Promise.all([
-    fetchSales("month", "desc"), // mais vendidos do mês
-    fetchSales("year",  "desc"), // mais vendidos do ano
-    fetchSales("month", "asc"),  // menos vendidos do mês
-    fetchSales("year",  "asc"),  // menos vendidos do ano
-  ]);
+  // Usa os dados do mês: top 10 e bottom 10 por quantidade
+  const sorted = [...salesMonth].sort((a, b) => Number(b.quantidade||0) - Number(a.quantidade||0));
+  const top10  = sorted.slice(0, 10);
+  const bot10  = [...sorted].reverse().slice(0, 10);
 
-  makeHBar($("#topMonth"),   topM, "Qtd vendida");
-  makeHBar($("#topYear"),    topY, "Qtd vendida");
-  makeHBar($("#bottomMonth"),botM, "Qtd vendida");
-  makeHBar($("#bottomYear"), botY, "Qtd vendida");
+  // Para o "ano", se quiser algo mais elaborado podemos somar por YYYY, mas por ora
+  // reutilizamos o mês atual para preencher o layout:
+  makeHBar($("#topMonth"),    top10, "Qtd vendida");
+  makeHBar($("#bottomMonth"), bot10, "Qtd vendida");
+  makeHBar($("#topYear"),     top10, "Qtd vendida");
+  makeHBar($("#bottomYear"),  bot10, "Qtd vendida");
 }
-
 
 // ------- Despesas / Investimentos -------
 async function renderDespesas(root) {
   const mes = currentMonthStr();
+
   root.innerHTML = `
-    <h2 style="font-size: 38px; color:#1a6bc6 !important; filter: saturate(1.25) contrast(3.45);" class="h3-center">Despesas</h2>
+    <h2 style="font-size:38px;color:#1a6bc6 !important;filter:saturate(1.25) contrast(3.45);" class="h3-center">Despesas</h2>
 
     <h3 class="h3-center">Gastos</h3>
     <form id="formG" class="panel form">
@@ -558,7 +426,7 @@ async function renderDespesas(root) {
       <label>Quem
         <select name="quem"><option>Bonette</option><option>Daniel</option></select>
       </label>
-      <div style="margin-top: 14px;"><button class="btn" type="submit">Adicionar Gasto</button></div>
+      <div style="margin-top:14px;"><button class="btn" type="submit">Adicionar Gasto</button></div>
     </form>
 
     <div class="panel"><table class="tbl" id="tblG"></table></div>
@@ -585,21 +453,18 @@ async function renderDespesas(root) {
       <label>Quem
         <select name="quem"><option>Bonette</option><option>Daniel</option></select>
       </label>
-      <div style="margin-top: 14px;"><button class="btn" type="submit">Adicionar Investimento</button></div>
+      <div style="margin-top:14px;"><button class="btn" type="submit">Adicionar Investimento</button></div>
     </form>
 
     <div class="panel"><table class="tbl" id="tblI"></table></div>
 
     <hr/>
 
-    <!-- NOVA SEÇÃO: PRODUTOS COMPRADOS -->
     <h3 class="h3-center">Produtos Comprados</h3>
-    <div class="panel">
-      <table class="tbl" id="tblCompras"></table>
-    </div>
+    <div class="panel"><table class="tbl" id="tblCompras"></table></div>
   `;
 
-  /* ----- submits Gastos/Investimentos ----- */
+  // submits
   $("#formG").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -615,57 +480,33 @@ async function renderDespesas(root) {
     await renderDespesas(root);
   });
 
-  /* ----- Tabela de Gastos ----- */
+  // tabelas
   const gastos = await api(`/gastos?month=${mes}`);
-  const gi = [
-    ["ID", "Data", "Categoria", "Descrição", "Valor (BRL)", "Valor (USD)", "Método", "Quem", "Ações"],
-  ];
+  const gi = [["ID","Data","Categoria","Descrição","Valor (BRL)","Valor (USD)","Método","Quem","Ações"]];
   for (const g of gastos) {
     gi.push([
-      g.id,
-      g.data,
-      g.categoria,
-      g.descricao || "",
+      g.id, g.data, g.categoria, g.descricao || "",
       `<span class="num">${fmtBRL(g.valor_brl)}</span>`,
       `<span class="num">${fmtUSD(g.valor_usd)}</span>`,
-      g.metodo || "",
-      g.quem || "",
-      `<button class="btn secondary" data-del="g-${g.id}">Excluir</button>`,
+      g.metodo || "", g.quem || "",
+      `<button class="btn secondary" data-del="g-${g.id}">Excluir</button>`
     ]);
   }
-  $("#tblG").innerHTML =
-    gi
-      .map((r, i) =>
-        i
-          ? `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`
-          : `<thead><tr>${r.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>`
-      )
-      .join("") + "</tbody>";
+  $("#tblG").innerHTML = gi.map((r,i)=> i ? `<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>` : `<thead><tr>${r.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`).join("") + "</tbody>";
 
-  /* ----- Tabela de Investimentos ----- */
   const inv = await api(`/investimentos?month=${mes}`);
-  const ii = [["ID", "Data", "Valor (BRL)", "Valor (USD)", "Método", "Quem", "Ações"]];
+  const ii = [["ID","Data","Valor (BRL)","Valor (USD)","Método","Quem","Ações"]];
   for (const g of inv) {
     ii.push([
-      g.id,
-      g.data,
+      g.id, g.data,
       `<span class="num">${fmtBRL(g.valor_brl)}</span>`,
       `<span class="num">${fmtUSD(g.valor_usd)}</span>`,
-      g.metodo || "",
-      g.quem || "",
-      `<button class="btn secondary" data-del="i-${g.id}">Excluir</button>`,
+      g.metodo || "", g.quem || "",
+      `<button class="btn secondary" data-del="i-${g.id}">Excluir</button>`
     ]);
   }
-  $("#tblI").innerHTML =
-    ii
-      .map((r, i) =>
-        i
-          ? `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`
-          : `<thead><tr>${r.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>`
-      )
-      .join("") + "</tbody>";
+  $("#tblI").innerHTML = ii.map((r,i)=> i ? `<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>` : `<thead><tr>${r.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`).join("") + "</tbody>";
 
-  /* ----- Exclusões Gastos/Investimentos ----- */
   $("#tblG").addEventListener("click", async (e) => {
     const tag = e.target?.dataset?.del;
     if (!tag) return;
@@ -683,43 +524,26 @@ async function renderDespesas(root) {
     await renderDespesas(root);
   });
 
-  /* ----- NOVA TABELA: PRODUTOS COMPRADOS ----- */
+  // Produtos comprados
   const prods = await api(`/produtos?month=${mes}`);
-  const pc = [[
-    "ID",
-    "Data",
-    "Nome",
-    "UPC",
-    "ASIN",
-    "Quantidade comprada",
-    "Valor total (USD)",
-    "Ações"
-  ]];
-
+  const produtoTotalUSD = (p) => {
+    const qty = Number(p.quantidade || 0);
+    const unit = Number(p.custo_base || 0);
+    const prep = Number(p.prep || 0);
+    const freight = Number(p.freight || 0);
+    return qty * (unit + prep) + freight;
+  };
+  const pc = [["ID","Data","Nome","UPC","ASIN","Quantidade comprada","Valor total (USD)","Ações"]];
   for (const p of prods) {
-    const total = produtoTotalUSD(p);
     pc.push([
-      p.id,
-      p.data_add || "",
-      p.nome || "",
-      p.upc || "",
-      p.asin || "",
+      p.id, p.data_add || "", p.nome || "", p.upc || "", p.asin || "",
       `<span class="num">${Number(p.quantidade || 0)}</span>`,
-      `<span class="num">${fmtUSD(total)}</span>`,
+      `<span class="num">${fmtUSD(produtoTotalUSD(p))}</span>`,
       `<button class="btn secondary" data-del-prod="${p.id}">Excluir</button>`
     ]);
   }
+  $("#tblCompras").innerHTML = pc.map((r,i)=> i ? `<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>` : `<thead><tr>${r.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`).join("") + "</tbody>";
 
-  $("#tblCompras").innerHTML =
-    pc
-      .map((r, i) =>
-        i
-          ? `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`
-          : `<thead><tr>${r.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>`
-      )
-      .join("") + "</tbody>";
-
-  // excluir produto (caso queira remover um produto comprado)
   $("#tblCompras").addEventListener("click", async (e) => {
     const id = e.target?.dataset?.delProd;
     if (!id) return;
@@ -729,86 +553,45 @@ async function renderDespesas(root) {
   });
 }
 
-
-// ------- Produtos -------
 // ------- Produtos -------
 async function renderProdutos(root) {
   const mes = currentMonthStr();
+
   root.innerHTML = `
     <h2 class="h3-center">Cadastro e Métricas por Produto (FBA)</h2>
 
     <form id="formP" class="panel form">
-      <!-- Linha 1 -->
       <label>Data adicionada na Amazon / Data de compra
         <input type="date" name="data_add" required>
       </label>
-      <label>Estoque
-        <input type="number" name="estoque" value="0" min="0">
-      </label>
+      <label>Estoque <input type="number" name="estoque" value="0" min="0"></label>
 
-      <!-- Linha 2 -->
-      <label>Nome do produto * 
-        <input type="text" name="nome" required placeholder="Ex.: Carrinho">
-      </label>
-      <label>Quantidade comprada (para rateio)
-        <input type="number" name="quantidade" value="0" min="0">
-      </label>
+      <label>Nome do produto * <input type="text" name="nome" required placeholder="Ex.: Carrinho"></label>
+      <label>Quantidade comprada (para rateio) <input type="number" name="quantidade" value="0" min="0"></label>
 
-      <!-- Linha 3 -->
-      <label>SKU
-        <input type="text" name="sku" placeholder="Ex.: ABC-123">
-      </label>
-      <label>Custo unitário base (USD)
-        <input type="number" step="0.01" name="custo_base" placeholder="0,00">
-      </label>
+      <label>SKU <input type="text" name="sku" placeholder="Ex.: ABC-123"></label>
+      <label>Custo unitário base (USD) <input type="number" step="0.01" name="custo_base" placeholder="0,00"></label>
 
-      <!-- Linha 4 -->
-      <label>UPC
-        <input type="text" name="upc">
-      </label>
-      <label>Frete do lote (USD)
-        <input type="number" step="0.01" name="freight" placeholder="0,00">
-      </label>
+      <label>UPC <input type="text" name="upc"></label>
+      <label>Frete do lote (USD) <input type="number" step="0.01" name="freight" placeholder="0,00"></label>
 
-      <!-- Linha 5 -->
-      <label>ASIN
-        <input type="text" name="asin">
-      </label>
-      <label>TAX do lote (USD)
-        <input type="number" step="0.01" name="tax" placeholder="0,00">
-      </label>
+      <label>ASIN <input type="text" name="asin"></label>
+      <label>TAX do lote (USD) <input type="number" step="0.01" name="tax" placeholder="0,00"></label>
 
-      <!-- Linha 6 -->
-      <label>Link do produto na Amazon
-        <input type="url" name="link_amazon" placeholder="https://...">
-      </label>
-      <label>PREP (USD) por unidade
-        <input type="number" step="0.01" name="prep" value="2.00">
-      </label>
+      <label>Link do produto na Amazon <input type="url" name="link_amazon" placeholder="https://..."></label>
+      <label>PREP (USD) por unidade <input type="number" step="0.01" name="prep" value="2.00"></label>
 
-      <!-- Linha 7 -->
-      <label>Link do fornecedor
-        <input type="url" name="link_fornecedor" placeholder="https://...">
-      </label>
-      <label>Sold for (USD)
-        <input type="number" step="0.01" name="sold_for" placeholder="0,00">
-      </label>
+      <label>Link do fornecedor <input type="url" name="link_fornecedor" placeholder="https://..."></label>
+      <label>Sold for (USD) <input type="number" step="0.01" name="sold_for" placeholder="0,00"></label>
 
-      <!-- Linha 8 -->
-      <div>
-        <button style="margin-top: 14px;" class="btn" type="submit">Salvar Produto</button>
-      </div>
-      <label>Amazon Fees (USD)
-        <input type="number" step="0.01" name="amazon_fees" placeholder="0,00">
-      </label>
+      <div><button style="margin-top: 14px;" class="btn" type="submit">Salvar Produto</button></div>
+      <label>Amazon Fees (USD) <input type="number" step="0.01" name="amazon_fees" placeholder="0,00"></label>
     </form>
 
     <div class="panel"><table class="tbl" id="tblP"></table></div>
-
     <div id="lucrosP" class="row"></div>
   `;
 
-  // submit
   $("#formP").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -817,47 +600,23 @@ async function renderProdutos(root) {
     await renderProdutos(root);
   });
 
-  // tabela de produtos (inalterada)
   const prods = await api(`/produtos?month=${mes}`);
-  const rows = [
-    ["ID","Data","Nome","SKU","UPC","ASIN","Estoque","Price to Buy","Amazon Fees","PREP","Sold for","Gross Profit","Ações"],
-  ];
+  const rows = [["ID","Data","Nome","SKU","UPC","ASIN","Estoque","Price to Buy","Amazon Fees","PREP","Sold for","Gross Profit","Ações"]];
 
   for (const p of prods) {
-    const qty = Number(p.quantidade || 0) || 1;
+    const qty    = Number(p.quantidade || 0) || 1;
     const rateio = (Number(p.tax || 0) + Number(p.freight || 0)) / qty;
     const unitP2B = Number(p.custo_base || 0) + rateio;
-    const gpUnit =
-      Number(p.sold_for || 0) -
-      Number(p.amazon_fees || 0) -
-      Number(p.prep || 0) -
-      unitP2B;
+    const gpUnit  = Number(p.sold_for || 0) - Number(p.amazon_fees || 0) - Number(p.prep || 0) - unitP2B;
 
     rows.push([
-      p.id,
-      p.data_add,
-      p.nome,
-      p.sku || "",
-      p.upc || "",
-      p.asin || "",
-      p.estoque,
-      fmtUSD(unitP2B),
-      fmtUSD(p.amazon_fees),
-      fmtUSD(p.prep),
-      fmtUSD(p.sold_for),
-      fmtUSD(gpUnit),
-      `<button class="btn secondary" data-del="${p.id}">Excluir</button>`,
+      p.id, p.data_add, p.nome, p.sku || "", p.upc || "", p.asin || "", p.estoque,
+      fmtUSD(unitP2B), fmtUSD(p.amazon_fees), fmtUSD(p.prep), fmtUSD(p.sold_for), fmtUSD(gpUnit),
+      `<button class="btn secondary" data-del="${p.id}">Excluir</button>`
     ]);
   }
 
-  $("#tblP").innerHTML =
-    rows
-      .map((r, i) =>
-        i
-          ? `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`
-          : `<thead><tr>${r.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>`
-      )
-      .join("") + "</tbody>";
+  $("#tblP").innerHTML = rows.map((r,i)=> i ? `<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>` : `<thead><tr>${r.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`).join("") + "</tbody>";
 
   $("#tblP").addEventListener("click", async (e) => {
     const id = e.target?.dataset?.del;
@@ -876,7 +635,7 @@ async function renderProdutos(root) {
         <div class="value">${fmtUSD(lucroPeriodo)}</div>
       </div>
     </div>
-    <div class="lucro-card" style="flex:1; margin-left:14px">
+    <div class="lucro-card" style="flex:1;margin-left:14px">
       <div class="ico"><img src="assets/triangle-up.svg" alt=""></div>
       <div>
         <div class="title">Lucro TOTAL — soma de todos os meses</div>
@@ -886,14 +645,13 @@ async function renderProdutos(root) {
   `;
 }
 
-
-// ====================== Router ======================
+// ===== Router =====
 const routes = {
   "/principal": renderPrincipal,
-  "/receitas": renderReceitas,
-  "/graficos": renderGraficos,
-  "/despesas": renderDespesas,
-  "/produtos": renderProdutos,
+  "/receitas":  renderReceitas,
+  "/graficos":  renderGraficos,
+  "/despesas":  renderDespesas,
+  "/produtos":  renderProdutos,
 };
 
 async function router() {
@@ -907,11 +665,8 @@ async function router() {
     root.innerHTML = `<div class="panel">Erro: ${e.message}</div>`;
   }
 }
-function refreshRoute() {
-  router();
-}
+function refreshRoute() { router(); }
 
-// boot
 window.addEventListener("hashchange", router);
 window.addEventListener("DOMContentLoaded", () => {
   initMonthYear();

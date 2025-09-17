@@ -5,41 +5,29 @@
     <title>Controle Financeiro Qota Store</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- Favicon básico -->
-    <link
-      rel="icon"
-      type="image/png"
-      href="./assets/favicon.png"
-      sizes="32x32"
-    />
-    <link
-      rel="icon"
-      type="image/png"
-      href="./assets/favicon.png"
-      sizes="16x16"
-    />
-
-    <!-- iOS / atalho em tela inicial -->
+    <!-- Favicon / PWA básico -->
+    <link rel="icon" type="image/png" href="./assets/favicon.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="./assets/favicon.png" sizes="16x16" />
     <link rel="apple-touch-icon" href="./assets/favicon.png" />
-
-    <!-- Cor do tema para barra do navegador em mobile -->
     <meta name="theme-color" content="#0b1623" />
-    <!-- Google Fonts: Poppins com pesos até 900 -->
+
+    <!-- Fonte -->
     <link
       href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap"
       rel="stylesheet"
     />
 
+    <!-- Estilos -->
     <link href="styles.css" rel="stylesheet" />
+
+    <!-- Chart.js + plugin de rótulos (usados nos gráficos) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-
   </head>
 
   <body>
     <header class="top">
       <div class="brand">
-        <!-- Troque o src abaixo pelo caminho do seu arquivo de logo -->
         <img
           src="assets/logo-qota-storee-semfundo.png"
           alt="Qota Store"
@@ -52,12 +40,12 @@
       <hr />
 
       <div class="filters">
-        <label
-          >Mês:
+        <label>
+          Mês:
           <select id="selMes"></select>
         </label>
-        <label
-          >Ano:
+        <label>
+          Ano:
           <select id="selAno"></select>
         </label>
       </div>
@@ -88,6 +76,7 @@
 
     <main id="app"></main>
 
+    <!-- (Opcional) Template antigo de KPI; mantido por compatibilidade -->
     <template id="tpl-kpi">
       <div class="kpi-row">
         <div class="kpi receita">
@@ -108,7 +97,7 @@
       </div>
     </template>
 
-    <script src="app.js?v=2025-09-17-01" defer></script>
-
+    <!-- App -->
+    <script src="app.js" defer></script>
   </body>
 </html>

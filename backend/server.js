@@ -6,11 +6,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { openDb, all, get, run } from "./db.pg.js";
 
-// --- paths auxiliares ---
+// ---------- paths auxiliares ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// *** ATENÇÃO: seu front está em frontend/public ***
+// SPA está em backend/public
 const PUBLIC_DIR = path.join(__dirname, "public");
 
 const app = express();
@@ -19,7 +19,7 @@ app.use(express.json());
 // ---------- CORS (lendo ALLOWED_ORIGINS) ----------
 const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 app.use(
@@ -35,7 +35,10 @@ app.use(
 // ---------- Anti-cache somente para a API ----------
 app.use((req, res, next) => {
   if (req.path.startsWith("/api")) {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     res.setHeader("Surrogate-Control", "no-store");
@@ -52,8 +55,9 @@ app.use((req, res, next) => {
 });
 app.use(express.static(PUBLIC_DIR, { index: false, etag: true, lastModified: true }));
 
+// Rotas da SPA (fallback para index.html)
 app.get(
-  ["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos", "/#/.*"],
+  ["/", "/principal", "/receitas", "/graficos", "/despesas", "/produtos"],
   (_req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.sendFile(path.join(PUBLIC_DIR, "index.html"));
@@ -245,7 +249,7 @@ app.delete("/api/amazon_receitas/:id", async (req, res) => {
   res.json(out);
 });
 
-// Amazon saldos e settlements (para futuros cards)
+// Amazon saldos (placeholder simp.)
 app.get("/api/amazon_saldos/latest", async (_req, res) => {
   const row = await get(db, `SELECT * FROM amazon_saldos ORDER BY (data)::date DESC, id DESC LIMIT 1`);
   res.json(row || { disponivel: 0, pendente: 0, moeda: "USD" });
@@ -308,19 +312,15 @@ app.get("/api/metrics/totais", async (_req, res) => {
 
 app.get("/api/metrics/lucros", async (req, res) => {
   const { month } = req.query;
-
   const amzAll = await all(db, `SELECT id, data, produto_id, quantidade, valor_usd, sku, produto FROM amazon_receitas`);
   const prodsAll = await all(db, `SELECT * FROM produtos`);
-
   const periodReceipts = month ? amzAll.filter((r) => yyyymm(r.data) === month) : amzAll;
-
   const lucroPeriodo = await sumProfit(periodReceipts, prodsAll);
   const lucroTotal = await sumProfit(amzAll, prodsAll);
-
   res.json({ lucroPeriodo, lucroTotal });
 });
 
-// Gráficos simples: receitas x despesas por mês
+// Séries por mês (receita x despesa)
 app.get("/api/metrics/series", async (_req, res) => {
   const amz = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM amazon_receitas`);
   const gastos = await all(db, `SELECT to_char(data::date,'YYYY-MM-DD') as data, valor_usd FROM gastos`);
@@ -351,7 +351,11 @@ app.get("/api/metrics/series", async (_req, res) => {
     comprasM[k] = (comprasM[k] || 0) + total;
   }
 
-  const meses = Array.from(new Set([...Object.keys(receitasM), ...Object.keys(gastosM), ...Object.keys(investM), ...Object.keys(comprasM)])).filter(Boolean).sort();
+  const meses = Array.from(
+    new Set([...Object.keys(receitasM), ...Object.keys(gastosM), ...Object.keys(investM), ...Object.keys(comprasM)])
+  )
+    .filter(Boolean)
+    .sort();
 
   const series = meses.map((m) => {
     const despt = (gastosM[m] || 0) + (investM[m] || 0) + (comprasM[m] || 0);
@@ -359,6 +363,52 @@ app.get("/api/metrics/series", async (_req, res) => {
   });
 
   res.json(series);
+});
+
+// ======= NOVO: vendas por produto para os gráficos =======
+// /api/metrics/products/sales?scope=month|year&order=desc|asc&limit=10&year=2025&month=09
+app.get("/api/metrics/products/sales", async (req, res) => {
+  try {
+    const scope = (req.query.scope || "month").toLowerCase();   // 'month' ou 'year'
+    const order = (req.query.order || "desc").toLowerCase();    // 'asc' ou 'desc'
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || "10", 10), 100));
+    const year  = req.query.year ? String(req.query.year) : null;
+    const month = req.query.month ? String(req.query.month).padStart(2, "0") : null;
+
+    const params = [];
+    let where = "";
+
+    if (scope === "month" && year && month) {
+      where = "WHERE to_char(ar.data::date,'YYYY-MM') = ?";
+      params.push(`${year}-${month}`);
+    } else if (scope === "year" && year) {
+      where = "WHERE to_char(ar.data::date,'YYYY') = ?";
+      params.push(year);
+    }
+
+    const rows = await all(
+      db,
+      `
+      SELECT
+        COALESCE(p.id, ar.produto_id)        AS produto_id,
+        COALESCE(p.nome, ar.produto, ar.sku) AS nome,
+        COALESCE(p.sku,  ar.sku)             AS sku,
+        SUM(ar.quantidade)                   AS qty
+      FROM amazon_receitas ar
+      LEFT JOIN produtos p ON p.id = ar.produto_id
+      ${where}
+      GROUP BY 1,2,3
+      ORDER BY qty ${order === "asc" ? "ASC" : "DESC"}, nome ASC
+      LIMIT ${limit}
+      `,
+      params
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error("products/sales error:", err);
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
 });
 
 // ===== (opcional) teste SP-API =====
@@ -381,5 +431,6 @@ app.get("/api/spapi/test", async (_req, res) => {
   }
 });
 
+// ---------- start ----------
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("API rodando na porta " + PORT));
