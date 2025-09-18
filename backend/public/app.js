@@ -4,8 +4,9 @@
 
 // ======= Config =======
 const API = "/api";
+
 // ======= Helpers DOM / formato =======
-const $ = (sel, el = document) => el.querySelector(sel);
+const $  = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
 
 const fmtUSD = (x) =>
@@ -22,19 +23,31 @@ const fmtBRL = (x) =>
 
 const signCls = (x) => (Number(x) > 0 ? "pos" : Number(x) < 0 ? "neg" : "");
 
+// ---------- Datas / números ----------
+const fmtDateBR = (iso) => {
+  if (!iso) return "";
+  // 1) tenta com Date (para strings ISO e similares)
+  const d = new Date(iso);
+  if (!Number.isNaN(d.getTime())) {
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const yy = d.getUTCFullYear();
+    return `${dd}/${mm}/${yy}`;
+  }
+  // 2) fallback para "YYYY-MM-DD..."
+  const s = String(iso).slice(0, 10);
+  const [y, m, day] = s.split("-");
+  if (y && m && day) return `${day.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+  return s || "";
+};
+
+const fmtPct = (x) =>
+  x == null || Number.isNaN(+x) ? "-" : `${(+x).toFixed(1)}%`;
+
+// ---------- Tabelas / cálculos ----------
 const MESES_PT = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 
 const monthLabel = (m) => {
@@ -75,13 +88,30 @@ function initMonthYear() {
 // total gasto em um produto (compra)
 // = (qty * (custo_base + prep)) + freight
 function produtoTotalUSD(p) {
-  const qty       = Number(p.quantidade || 0);
-  const unit      = Number(p.custo_base || 0);   // valor unitário de compra
-  const prep      = Number(p.prep || 0);         // prep por unidade
-  const freight   = Number(p.freight || 0);      // frete do lote
+  const qty     = Number(p.quantidade || 0);
+  const unit    = Number(p.custo_base || 0);
+  const prep    = Number(p.prep || 0);
+  const freight = Number(p.freight || 0);
 
   return (qty * (unit + prep)) + freight;
 }
+
+// helpers p/ métricas por produto (P2B, GP e Margem %)
+const unitP2B = (p) => {
+  const qty = Number(p.quantidade || 0);
+  const rateio = qty > 0 ? (Number(p.tax || 0) + Number(p.freight || 0)) / qty : 0;
+  return Number(p.custo_base || 0) + rateio;
+};
+const gpUnit = (p) =>
+  Number(p.sold_for || 0) -
+  Number(p.amazon_fees || 0) -
+  Number(p.prep || 0) -
+  unitP2B(p);
+const marginPct = (p) => {
+  const sold = Number(p.sold_for || 0);
+  if (sold <= 0) return null;
+  return (gpUnit(p) / sold) * 100;
+};
 
 function currentMonthStr() {
   const m = String($("#selMes").value).padStart(2, "0");
@@ -188,7 +218,6 @@ async function renderPrincipal(root) {
           <div class="value">${fmtUSD(lucroPeriodo)}</div>
         </div>
       </section>
-   
 
       <section class="lucro-card" style="margin-top:14px">
         <div class="ico"><img src="${ICONS.up}" alt=""></div>
@@ -360,7 +389,7 @@ async function renderReceitas(root) {
     const sku = r.sku || p.sku || "";
     html.push(`<tr>
       <td>${r.id}</td>
-      <td>${r.data}</td>
+      <td>${fmtDateBR(r.data)}</td>
       <td>${nome}</td>
       <td>${sku}</td>
       <td>${r.quantidade}</td>
@@ -384,8 +413,9 @@ async function renderReceitas(root) {
 // ------- Gráficos -------
 async function renderGraficos(root) {
   const mes = currentMonthStr();
-  // >>> AGORA usa o MÊS/ANO dos seletores:
-  const [year, month] = mes.split("-");
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, "0");
 
   root.innerHTML = `
     <h2 class="h3-center">Gráficos</h2>
@@ -453,7 +483,7 @@ async function renderGraficos(root) {
   const fetchSales = (scope, order) =>
     api(`/metrics/products/sales?scope=${scope}&order=${order}&limit=10&year=${year}&month=${month}`);
 
-  // === estilo das barras (igual ao print) ===
+  // estilo das barras (igual ao print)
   const BAR_STROKE = "#3498DB";                  // 100%
   const BAR_FILL   = "rgba(52, 152, 219, 0.32)"; // 32%
 
@@ -504,10 +534,10 @@ async function renderGraficos(root) {
 
   // ======== Busca dos dados e render ========
   const [topM, topY, botM, botY] = await Promise.all([
-    fetchSales("month", "desc"), // mais vendidos do mês
-    fetchSales("year",  "desc"), // mais vendidos do ano
-    fetchSales("month", "asc"),  // menos vendidos do mês
-    fetchSales("year",  "asc"),  // menos vendidos do ano
+    fetchSales("month", "desc"),
+    fetchSales("year",  "desc"),
+    fetchSales("month", "asc"),
+    fetchSales("year",  "asc"),
   ]);
 
   makeHBar($("#topMonth"),   topM, "Qtd vendida");
@@ -615,7 +645,7 @@ async function renderDespesas(root) {
   for (const g of gastos) {
     gi.push([
       g.id,
-      g.data,
+      fmtDateBR(g.data),
       g.categoria,
       g.descricao || "",
       `<span class="num">${fmtBRL(g.valor_brl)}</span>`,
@@ -640,7 +670,7 @@ async function renderDespesas(root) {
   for (const g of inv) {
     ii.push([
       g.id,
-      g.data,
+      fmtDateBR(g.data),
       `<span class="num">${fmtBRL(g.valor_brl)}</span>`,
       `<span class="num">${fmtUSD(g.valor_usd)}</span>`,
       g.metodo || "",
@@ -685,19 +715,23 @@ async function renderDespesas(root) {
     "ASIN",
     "Quantidade comprada",
     "Valor total (USD)",
+    "Margem (%)",
     "Ações"
   ]];
 
   for (const p of prods) {
     const total = produtoTotalUSD(p);
+    const mrg   = marginPct(p);
+
     pc.push([
       p.id,
-      p.data_add || "",
+      fmtDateBR(p.data_add || ""),
       p.nome || "",
       p.upc || "",
       p.asin || "",
       `<span class="num">${Number(p.quantidade || 0)}</span>`,
       `<span class="num">${fmtUSD(total)}</span>`,
+      `<span class="num">${fmtPct(mrg)}</span>`,
       `<button class="btn secondary" data-del-prod="${p.id}">Excluir</button>`
     ]);
   }
@@ -814,28 +848,19 @@ async function renderProdutos(root) {
   ];
 
   for (const p of prods) {
-    const qty = Number(p.quantidade || 0) || 1;
-    const rateio = (Number(p.tax || 0) + Number(p.freight || 0)) / qty;
-    const unitP2B = Number(p.custo_base || 0) + rateio;
-    const gpUnit =
-      Number(p.sold_for || 0) -
-      Number(p.amazon_fees || 0) -
-      Number(p.prep || 0) -
-      unitP2B;
-
     rows.push([
       p.id,
-      p.data_add,
+      fmtDateBR(p.data_add),
       p.nome,
       p.sku || "",
       p.upc || "",
       p.asin || "",
       p.estoque,
-      fmtUSD(unitP2B),
+      fmtUSD(unitP2B(p)),
       fmtUSD(p.amazon_fees),
       fmtUSD(p.prep),
       fmtUSD(p.sold_for),
-      fmtUSD(gpUnit),
+      fmtUSD(gpUnit(p)),
       `<button class="btn secondary" data-del="${p.id}">Excluir</button>`,
     ]);
   }
